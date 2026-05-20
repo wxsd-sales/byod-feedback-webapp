@@ -2,6 +2,7 @@ const hashes = getHashes();
 // Set this to your feedback endpoint to enable HTTP POST submission.
 const WEB_APP_FEEDBACK_URL = "";
 const FEEDBACK_POST_URL = hashes?.feedbackUrl || WEB_APP_FEEDBACK_URL;
+const AUTO_CLOSE_DELAY = hashes?.autoCloseDelay || 5000;
 const HOLD_DURATION_MS = 5000;
 const HOLD_LOST_GRACE_MS = 450;
 const WASM_ROOT =
@@ -35,7 +36,6 @@ const thumbMark = document.querySelector("#thumbMark");
 const holdLabel = document.querySelector("#holdLabel");
 const thanksPanel = document.querySelector("#thanksPanel");
 const thanksThumb = document.querySelector("#thanksThumb");
-
 
 let GestureRecognizer;
 let recognizer;
@@ -257,14 +257,15 @@ function updateHoldProgress(now) {
 
   const elapsed = now - holdStartedAt;
   const progress = Math.min(elapsed / HOLD_DURATION_MS, 1);
-  const secondsLeft = Math.max(Math.ceil((HOLD_DURATION_MS - elapsed) / 1000), 0);
+  const secondsLeft = Math.max(
+    Math.ceil((HOLD_DURATION_MS - elapsed) / 1000),
+    0,
+  );
   const feedback = FEEDBACK_BY_GESTURE[holdGesture.categoryName];
 
   holdRing.style.setProperty("--progress", `${progress * 360}deg`);
   holdLabel.textContent =
-    secondsLeft > 0
-      ? `Hold for ${secondsLeft} seconds`
-      : "Feedback captured";
+    secondsLeft > 0 ? `Hold for ${secondsLeft} seconds` : "Feedback captured";
 
   if (progress >= 1) {
     completeFeedback();
@@ -298,7 +299,7 @@ function completeFeedback() {
     confidence: Number(holdScore.toFixed(4)),
     heldForMs: HOLD_DURATION_MS,
     collectedAt: new Date().toISOString(),
-    deviceDetails
+    deviceDetails,
   };
 
   stopCamera();
@@ -310,14 +311,17 @@ function completeFeedback() {
   thanksThumb.textContent = feedback.mark;
   thanksPanel.hidden = false;
 
-  setHash({action: 'close'})
+  setTimeout(setHash, AUTO_CLOSE_DELAY, { action: "close" });
 
   void sendFeedback(payload);
 }
 
 async function sendFeedback(payload) {
   if (!FEEDBACK_POST_URL) {
-    console.info("Feedback POST skipped because FEEDBACK_POST_URL is not set.", payload);
+    console.info(
+      "Feedback POST skipped because FEEDBACK_POST_URL is not set.",
+      payload,
+    );
     return;
   }
 
@@ -347,7 +351,6 @@ function getBestGesture(gestureLists) {
     .sort((first, second) => second.score - first.score)[0];
 }
 
-
 function getHashes() {
   if (!location.hash) return;
   const hashString = location.hash.split("#").slice(1).join("#");
@@ -360,15 +363,13 @@ function getHashes() {
   }
 }
 
-
-
-function setHash(params={}) {
-  const hashes = {}
+function setHash(params = {}) {
+  const hashes = {};
   for (const key in params) {
     if (params.hasOwnProperty(key)) {
       hashes[key] = params[key];
     }
   }
+  consol;
   window.location.hash = "#" + btoa(JSON.stringify(hashes));
-  
 }
