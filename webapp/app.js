@@ -370,6 +370,6 @@ function setHash(params = {}) {
       hashes[key] = params[key];
     }
   }
-  consol;
+  console.log('Setting Hash To:', JSON.stringify(hashes))
   window.location.hash = "#" + btoa(JSON.stringify(hashes));
 }
