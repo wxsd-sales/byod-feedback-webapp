@@ -1,0 +1,447 @@
+:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --ink: #151820;
+  --muted: #5f6c7d;
+  --panel: #ffffff;
+  --line: #d9e1eb;
+  --shadow: 0 22px 60px rgba(20, 28, 42, 0.16);
+  --up: #178a51;
+  --up-soft: #e9f6ef;
+  --down: #c33f3d;
+  --down-soft: #faeded;
+  --ring-track: rgba(255, 255, 255, 0.32);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.feedback-experience {
+  width: min(980px, 100%);
+  display: grid;
+  gap: 18px;
+}
+
+.prompt-panel,
+.thanks-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.prompt-panel {
+  padding: 24px;
+  text-align: center;
+}
+
+.prompt-panel h1 {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: clamp(1.65rem, 4vw, 2.6rem);
+  line-height: 1.08;
+  font-weight: 850;
+}
+
+.camera-stage {
+  position: relative;
+  overflow: hidden;
+  min-height: 360px;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0d1117;
+  box-shadow: var(--shadow);
+}
+
+#webcam {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+  object-fit: cover;
+}
+
+#webcam[hidden] {
+  display: none;
+}
+
+.mock-person {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.2), transparent 28%),
+    linear-gradient(135deg, #1a2533 0%, #0d1117 58%, #172232 100%);
+}
+
+.mock-person[hidden] {
+  display: none;
+}
+
+.mock-head {
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  width: clamp(118px, 15vw, 176px);
+  height: clamp(118px, 15vw, 176px);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 38% 45%, #56372d 0 2.5%, transparent 3%),
+    radial-gradient(circle at 63% 45%, #56372d 0 2.5%, transparent 3%),
+    linear-gradient(160deg, #f2caa7 0%, #d99b76 100%);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.28);
+  transform: translateX(-50%);
+}
+
+.mock-head::before {
+  content: "";
+  position: absolute;
+  inset: -2% 0 auto;
+  height: 42%;
+  border-radius: 999px 999px 42px 42px;
+  background: #2d211f;
+}
+
+.mock-neck {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: clamp(42px, 5vw, 64px);
+  height: clamp(170px, 8vw, 76px);
+  border-radius: 18px;
+  background: #d99b76;
+  transform: translate(-50%, -50%);
+}
+
+.mock-body {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(-78px, -7vw, -42px);
+  width: clamp(300px, 38vw, 500px);
+  height: clamp(190px, 22vw, 280px);
+  border-radius: 44% 44% 20px 20px;
+  background: linear-gradient(160deg, #2d6cdf 0%, #194a9b 100%);
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.22);
+  transform: translateX(-50%);
+}
+
+.mock-shoulder {
+  position: absolute;
+  bottom: 28px;
+  width: 42%;
+  height: 34%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.mock-shoulder-left {
+  left: 20px;
+}
+
+.mock-shoulder-right {
+  right: 20px;
+}
+
+.mock-thumbs-up-arm {
+  position: absolute;
+  left: 51%;
+  top: 50%;
+  z-index: 1;
+  display: none;
+  width: clamp(210px, 24vw, 330px);
+  height: clamp(180px, 20vw, 270px);
+  transform: translate(-9%, -13%);
+}
+
+body[data-view="countdown"] .mock-thumbs-up-arm {
+  display: block;
+}
+
+.mock-upper-arm,
+.mock-forearm,
+.mock-hand,
+.mock-thumb,
+.mock-fingers {
+  position: absolute;
+  background: #e4a579;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+}
+
+.mock-upper-arm {
+  left: 35%;
+  bottom: 25%;
+  width: 60%;
+  height: 35%;
+  border-radius: 999px;
+  transform: rotate(-70deg);
+  transform-origin: right center;
+    background: linear-gradient(160deg, #184baa 0%, #194a9b 100%);
+
+}
+
+.mock-forearm {
+  left: 85%;
+  bottom: 32%;
+  width: 24%;
+  height: 50%;
+  border-radius: 999px;
+  transform: rotate(6deg);
+}
+
+.mock-hand {
+  left: 87%;
+  top: 4%;
+  width: 32%;
+  height: 34%;
+  border-radius: 18px 18px 24px 24px;
+}
+
+.mock-thumb {
+  left: 25%;
+  bottom: 78%;
+  width: 28%;
+  height: 62%;
+  border-radius: 999px 999px 14px 14px;
+  transform: rotate(-2deg);
+  transform-origin: bottom center;
+}
+
+.mock-fingers {
+  right: -17%;
+  top: 5%;
+  width: 42%;
+  height: 90%;
+  border-radius: 14px 20px 20px 14px;
+}
+
+.mock-fingers::before,
+.mock-fingers::after {
+  content: "";
+  position: absolute;
+  left: 10%;
+  width: 82%;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(109, 62, 41, 0.26);
+}
+
+.mock-fingers::before {
+  top: 35%;
+}
+
+.mock-fingers::after {
+  top: 66%;
+}
+
+.gesture-confirmation {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 16px;
+  padding: 24px;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.gesture-confirmation.is-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.hold-ring {
+  --progress: 0deg;
+  display: grid;
+  place-items: center;
+  width: clamp(128px, 22vw, 190px);
+  height: clamp(128px, 22vw, 190px);
+  border-radius: 50%;
+  background:
+    conic-gradient(var(--gesture-color) var(--progress), var(--ring-track) 0),
+    rgba(8, 12, 18, 0.52);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.32);
+}
+
+.hold-ring::before {
+  content: "";
+  grid-area: 1 / 1;
+  width: calc(100% - 18px);
+  height: calc(100% - 18px);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.thumb-mark {
+  grid-area: 1 / 1;
+  z-index: 1;
+  color: var(--gesture-color);
+  font-size: clamp(2.4rem, 7vw, 4.6rem);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.hold-label {
+  max-width: min(540px, 100%);
+  padding: 9px 12px;
+  border-radius: 6px;
+  background: rgba(8, 12, 18, 0.72);
+  color: #fff;
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.gesture-confirmation[data-gesture="up"] {
+  --gesture-color: var(--up);
+}
+
+.gesture-confirmation[data-gesture="down"] {
+  --gesture-color: var(--down);
+}
+
+.gesture-confirmation[data-gesture="down"] .thumb-mark,
+.feedback-choice-down .choice-thumb,
+.thanks-panel[data-gesture="down"] .thanks-thumb {
+  transform: scaleX(-1);
+}
+
+.camera-stage[hidden],
+.prompt-panel[hidden],
+.feedback-choices[hidden] {
+  display: none;
+}
+
+.feedback-choices {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: clamp(52px, 12vw, 160px);
+  padding: 4px 16px 10px;
+}
+
+.feedback-choice {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-width: 140px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.choice-thumb {
+  display: grid;
+  place-items: center;
+  width: clamp(78px, 14vw, 118px);
+  height: clamp(78px, 14vw, 118px);
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow: 0 14px 34px rgba(20, 28, 42, 0.12);
+  font-size: clamp(2.6rem, 8vw, 4.4rem);
+  line-height: 1;
+}
+
+.feedback-choice-up .choice-thumb {
+  background: var(--up-soft);
+}
+
+.feedback-choice-down .choice-thumb {
+  background: var(--down-soft);
+}
+
+.choice-label {
+  color: var(--ink);
+  font-size: clamp(1rem, 2vw, 1.18rem);
+  font-weight: 800;
+}
+
+.thanks-panel {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: clamp(30px, 7vw, 70px) 24px;
+  text-align: center;
+}
+
+.thanks-panel[hidden] {
+  display: none;
+}
+
+.thanks-thumb {
+  display: grid;
+  place-items: center;
+  width: clamp(112px, 18vw, 160px);
+  height: clamp(112px, 18vw, 160px);
+  border-radius: 50%;
+  color: var(--gesture-color);
+  background: var(--gesture-soft);
+  font-size: clamp(2.4rem, 7vw, 4rem);
+  font-weight: 900;
+}
+
+.thanks-panel[data-gesture="up"] {
+  --gesture-color: var(--up);
+  --gesture-soft: var(--up-soft);
+}
+
+.thanks-panel[data-gesture="down"] {
+  --gesture-color: var(--down);
+  --gesture-soft: var(--down-soft);
+}
+
+.thanks-panel h2 {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  line-height: 1.05;
+}
+
+.thanks-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(1rem, 2vw, 1.18rem);
+  font-weight: 650;
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 14px;
+  }
+
+  .prompt-panel {
+    padding: 20px 16px;
+  }
+
+  .camera-stage {
+    min-height: auto;
+  }
+}
