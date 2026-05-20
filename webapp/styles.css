@@ -7,9 +7,9 @@
   --line: #d9e1eb;
   --shadow: 0 22px 60px rgba(20, 28, 42, 0.16);
   --up: #178a51;
-  --up-soft: #e9f6ef;
+  --up-soft: #82c29c;
   --down: #c33f3d;
-  --down-soft: #faeded;
+  --down-soft: #f67c7c;
   --ring-track: rgba(255, 255, 255, 0.32);
 }
 
@@ -19,12 +19,14 @@
 
 html,
 body {
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: #0d1117;
   color: var(--ink);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -32,48 +34,58 @@ body {
 }
 
 .app-shell {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 24px;
+  width: 100vw;
+  height: 100vh;
+  padding: 0;
+  overflow: hidden;
 }
 
 .feedback-experience {
-  width: min(980px, 100%);
-  display: grid;
-  gap: 18px;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0d1117;
 }
 
 .prompt-panel,
 .thanks-panel {
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 8px;
-  background: var(--panel);
+  background: rgba(255, 255, 255, 0.6);
   box-shadow: var(--shadow);
 }
 
 .prompt-panel {
-  padding: 24px;
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  z-index: 4;
+  width: min(100% - 36px, 920px);
+  padding: 14px 22px;
   text-align: center;
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
 }
 
 .prompt-panel h1 {
-  margin: 0 0 12px;
+  margin: 0px;
   color: var(--ink);
-  font-size: clamp(1.65rem, 4vw, 2.6rem);
+  font-size: clamp(1.55rem, 4.2vw, 2.4rem);
   line-height: 1.08;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .camera-stage {
-  position: relative;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  min-height: 360px;
-  aspect-ratio: 16 / 9;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
   background: #0d1117;
-  box-shadow: var(--shadow);
+  box-shadow: none;
 }
 
 #webcam {
@@ -104,7 +116,7 @@ body {
 
 .mock-head {
   position: absolute;
-  top: 20%;
+  top: 40%;
   left: 50%;
   width: clamp(118px, 15vw, 176px);
   height: clamp(118px, 15vw, 176px);
@@ -128,7 +140,7 @@ body {
 
 .mock-neck {
   position: absolute;
-  top: 50%;
+  top: 75%;
   left: 50%;
   width: clamp(42px, 5vw, 64px);
   height: clamp(170px, 8vw, 76px);
@@ -343,20 +355,35 @@ body[data-view="countdown"] .mock-thumbs-up-arm {
 }
 
 .feedback-choices {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: clamp(52px, 12vw, 160px);
-  padding: 4px 16px 10px;
+  position: absolute;
+  bottom: 20px;
+  z-index: 4;
+  inset-inline: 20px;
+  pointer-events: none;
 }
 
 .feedback-choice {
+  position: absolute;
+  bottom: 0;
   display: grid;
   justify-items: center;
   gap: 8px;
-  min-width: 140px;
+  min-width: 148px;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(8, 12, 18, 0.46);
   color: var(--muted);
   text-align: center;
+  backdrop-filter: blur(10px);
+}
+
+.feedback-choice-up {
+  left: 0;
+}
+
+.feedback-choice-down {
+  right: 0;
 }
 
 .choice-thumb {
@@ -380,16 +407,24 @@ body[data-view="countdown"] .mock-thumbs-up-arm {
 }
 
 .choice-label {
-  color: var(--ink);
+  color: #fff;
   font-size: clamp(1rem, 2vw, 1.18rem);
   font-weight: 800;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
 }
 
 .thanks-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
   display: grid;
   justify-items: center;
+  align-content: center;
   gap: 14px;
-  padding: clamp(30px, 7vw, 70px) 24px;
+  padding: 24px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.94);
   text-align: center;
 }
 
@@ -432,16 +467,20 @@ body[data-view="countdown"] .mock-thumbs-up-arm {
   font-weight: 650;
 }
 
-@media (max-width: 720px) {
-  .app-shell {
-    padding: 14px;
-  }
-
+@media (max-width: 900px) {
   .prompt-panel {
-    padding: 20px 16px;
+    top: 10px;
+    width: calc(100% - 10px);
+    padding: 12px 14px;
   }
 
-  .camera-stage {
-    min-height: auto;
+  .feedback-choices {
+    bottom: 12px;
+    inset-inline: 12px;
+  }
+
+  .feedback-choice {
+    min-width: 126px;
+    padding: 10px 12px;
   }
 }

@@ -290,7 +290,7 @@ function completeFeedback() {
 
   submitted = true;
   const feedback = FEEDBACK_BY_GESTURE[holdGesture.categoryName];
-  const {feedbackUrl, ...deviceDetails } = hashes;
+  const { feedbackUrl, ...deviceDetails } = hashes ?? {};
   const payload = {
     feedback: feedback.value,
     label: feedback.label,

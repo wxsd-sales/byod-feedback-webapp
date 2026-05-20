@@ -10,21 +10,22 @@ const virtualTimeBudget = process.env.SCREENSHOT_VIRTUAL_TIME_BUDGET || "5000";
 const verbose = ["1", "true", "yes"].includes(
   String(process.env.SCREENSHOT_VERBOSE || "").toLowerCase(),
 );
+const size = "1076,655";
 
 const shots = [
   {
     name: "screenshot-startup.png",
-    size: "2048,1200",
+    size,
     hash: { view: "startup" },
   },
   {
     name: "screenshot-countdown.png",
-    size: "2048,1200",
+    size,
     hash: { view: "countdown" },
   },
   {
     name: "screenshot-success.png",
-    size: "2048,1200",
+    size,
     hash: { view: "success" },
   },
 ];
@@ -156,6 +157,7 @@ function captureScreenshot({ filePath, size, url }) {
         "--disable-logging",
         "--hide-scrollbars",
         "--log-level=3",
+        "--force-device-scale-factor=1",
         `--window-size=${size}`,
         `--virtual-time-budget=${virtualTimeBudget}`,
         `--screenshot=${filePath}`,
