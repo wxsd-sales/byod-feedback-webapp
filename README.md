@@ -132,9 +132,9 @@ The web app is static HTML, CSS, and JavaScript, so it can be hosted from any HT
 
 ## Demo
 
-Check out the live web app here:
+Video Demo: https://app.vidcast.io/share/5e644cf8-7d1d-4984-a149-02946d1725b3
 
-https://wxsd-sales.github.io/byod-feedback-webapp/webapp
+Live Web App Demo: https://wxsd-sales.github.io/byod-feedback-webapp/webapp
 
 _For more demos & PoCs like this, check out our [Webex Labs site](https://collabtoolbox.cisco.com/webex-labs)._
 
