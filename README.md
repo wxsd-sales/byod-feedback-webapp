@@ -57,7 +57,8 @@ https://wxsd-sales.github.io/byod-feedback-webapp/webapp
 
    ```js
    const config = {
-     url: "https://wxsd-sales.github.io/byod-feedback-webapp/webapp",
+     webAppUrl: "https://wxsd-sales.github.io/byod-feedback-webapp/webapp",
+     feedbackUrl: "https://your-backend.example.com/feedback",
      duration: 1,
    };
    ```
@@ -73,21 +74,60 @@ Notes:
 
 ## Feedback Backend
 
-By default, the web app logs the captured feedback locally and skips network submission. To send feedback to your own backend, update `FEEDBACK_POST_URL` in [webapp/app.js](webapp/app.js):
+The feedback POST endpoint can be provided in either of two ways:
+
+- **Recommended for RoomOS deployments:** set `feedbackUrl` in the macro `config`. The macro includes this value in the hash parameters it appends to the web app URL, so the hosted web app can send feedback to your backend without changing the hosted app code.
+- **Recommended for self-hosted/custom builds:** set `WEB_APP_FEEDBACK_URL` directly in [webapp/app.js](webapp/app.js). This is useful when the web app is hosted in your own environment and should always post to the same backend.
+
+Macro-provided `feedbackUrl` takes priority. If it is not present, the web app falls back to `WEB_APP_FEEDBACK_URL`. If neither value is set, the web app logs the captured feedback locally and skips network submission.
+
+Macro configuration example:
 
 ```js
-const FEEDBACK_POST_URL = "https://your-backend.example.com/feedback";
+const config = {
+  webAppUrl: "https://wxsd-sales.github.io/byod-feedback-webapp/webapp",
+  feedbackUrl: "https://your-backend.example.com/feedback",
+  duration: 1,
+};
+```
+
+Web app configuration example:
+
+```js
+const WEB_APP_FEEDBACK_URL = "https://your-backend.example.com/feedback";
 ```
 
 The app sends a JSON payload with the feedback value, display label, detected gesture, recognition confidence, hold duration, and collection timestamp.
+
+It also shares any other details shared to the Web App by the macro souch as Workspace Name, Meeting Platform, Session Type, Webex Meeting Boolean and Duration of session or meeeting.
+
+```json
+{
+  "feedback": "satisfied",
+  "label": "Satisfied",
+  "gesture": "Thumb_Up",
+  "confidence": 0.9142,
+  "heldForMs": 5000,
+  "collectedAt": "2026-05-20T12:34:56.789Z",
+  "deviceDetails": {
+    "workspaceName": "Meeting Room 1",
+    "meetingPlatform": "Unknown | GoogleMeet | MSTeams | Webex | Zoom",
+    "sessionType": "Call | Share | InstantMeeting",
+    "webexMeeting": "True | False",
+    "duration": 10
+  }
+}
+```
+
+When using the macro, the web app URL can also include room and meeting context in the hash parameters, such as `workspaceName`, `meetingPlatform`, `sessionType`, `webexMeeting`, `duration`, and `feedbackUrl`.
 
 ## Hosting Your Own Copy
 
 The web app is static HTML, CSS, and JavaScript, so it can be hosted from any HTTPS-capable web server.
 
 1. Copy the `webapp` directory to your hosting environment.
-2. Update `FEEDBACK_POST_URL` in `webapp/app.js` if you want to send feedback to a backend.
-3. Update `config.url` in `macro/byod-feedback.js` to point to your hosted copy.
+2. Update `WEB_APP_FEEDBACK_URL` in `webapp/app.js` if your self-hosted app should always send feedback to one backend, or continue using the macro `feedbackUrl` setting if you want the macro to provide the backend URL.
+3. Update `config.webAppUrl` in `macro/byod-feedback.js` to point to your hosted copy.
 4. Ensure the RoomOS device can reach your web app URL and that the macro can add camera media access for that host.
 
 ## Demo

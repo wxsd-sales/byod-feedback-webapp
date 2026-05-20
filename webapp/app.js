@@ -1,5 +1,7 @@
+const hashes = getHashes();
 // Set this to your feedback endpoint to enable HTTP POST submission.
-const FEEDBACK_POST_URL = "";
+const WEB_APP_FEEDBACK_URL = "";
+const FEEDBACK_POST_URL = hashes?.feedbackUrl || WEB_APP_FEEDBACK_URL;
 const HOLD_DURATION_MS = 5000;
 const HOLD_LOST_GRACE_MS = 450;
 const WASM_ROOT =
@@ -33,7 +35,7 @@ const thumbMark = document.querySelector("#thumbMark");
 const holdLabel = document.querySelector("#holdLabel");
 const thanksPanel = document.querySelector("#thanksPanel");
 const thanksThumb = document.querySelector("#thanksThumb");
-const hashes = getHashes();
+
 
 let GestureRecognizer;
 let recognizer;
@@ -288,6 +290,7 @@ function completeFeedback() {
 
   submitted = true;
   const feedback = FEEDBACK_BY_GESTURE[holdGesture.categoryName];
+  const {feedbackUrl, ...deviceDetails } = hashes;
   const payload = {
     feedback: feedback.value,
     label: feedback.label,
@@ -295,6 +298,7 @@ function completeFeedback() {
     confidence: Number(holdScore.toFixed(4)),
     heldForMs: HOLD_DURATION_MS,
     collectedAt: new Date().toISOString(),
+    deviceDetails
   };
 
   stopCamera();
