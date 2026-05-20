@@ -45,8 +45,26 @@ function init() {
   xapi.Config.WebEngine.Mode.set("On");
   xapi.Command.WebEngine.MediaAccess.Add({ Device: "Camera", Hostname });
   xapi.Status.SystemUnit.State.NumberOfActiveCalls.on(processNumOfCalls);
+  xapi.Status.UserInterface.WebView.on(processWebViews);
 }
 
+
+async function processWebViews({URL}){
+  console.log('URL:', URL)
+  if(!URL) return
+  if(!URL.startsWith(config.webAppUrl)) return
+  const hashes = getHashes(URL);
+
+  console.log('Hashes:', hashes)
+
+  if(hashes?.action != 'close') return
+
+  console.log('Clearing WebView')
+  xapi.Command.UserInterface.WebView.Clear({Target: 'OSD'})
+
+
+
+}
 async function processNumOfCalls(numOfCalls) {
   console.log("Number of Active Calls:", numOfCalls);
 
@@ -117,4 +135,17 @@ async function generateHash(args) {
   result.workspaceName = await xapi.Status.UserInterface.ContactInfo.Name.get();
 
   return btoa(JSON.stringify(result));
+}
+
+
+function getHashes(url) {
+  if (!url) return;
+  const hashString = url.split("#")?.slice(1)?.join("#");
+
+  try {
+    return JSON.parse(atob(hashString));
+  } catch (error) {
+    console.warn("Unable to parse hash parameters.", error);
+    return;
+  }
 }

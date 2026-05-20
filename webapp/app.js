@@ -310,6 +310,8 @@ function completeFeedback() {
   thanksThumb.textContent = feedback.mark;
   thanksPanel.hidden = false;
 
+  setHash({action: 'close'})
+
   void sendFeedback(payload);
 }
 
@@ -356,4 +358,17 @@ function getHashes() {
     console.warn("Unable to parse hash parameters.", error);
     return;
   }
+}
+
+
+
+function setHash(params={}) {
+  const hashes = {}
+  for (const key in params) {
+    if (params.hasOwnProperty(key)) {
+      hashes[key] = params[key];
+    }
+  }
+  window.location.hash = "#" + btoa(JSON.stringify(hashes));
+  
 }
