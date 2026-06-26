@@ -1,8 +1,6 @@
 const hashes = getHashes();
 // Set this to your feedback endpoint to enable HTTP POST submission.
 const WEB_APP_FEEDBACK_URL = "";
-const FEEDBACK_POST_URL = hashes?.feedbackUrl || WEB_APP_FEEDBACK_URL;
-const AUTO_CLOSE_DELAY = hashes?.autoCloseDelay || 5000;
 const HOLD_DURATION_MS = 5000;
 const HOLD_LOST_GRACE_MS = 450;
 const WASM_ROOT =
@@ -291,15 +289,14 @@ function completeFeedback() {
 
   submitted = true;
   const feedback = FEEDBACK_BY_GESTURE[holdGesture.categoryName];
-  const { feedbackUrl, ...deviceDetails } = hashes ?? {};
   const payload = {
+    action: "submit",
     feedback: feedback.value,
     label: feedback.label,
     gesture: holdGesture.categoryName,
     confidence: Number(holdScore.toFixed(4)),
     heldForMs: HOLD_DURATION_MS,
     collectedAt: new Date().toISOString(),
-    deviceDetails,
   };
 
   stopCamera();
@@ -310,37 +307,10 @@ function completeFeedback() {
   thanksPanel.dataset.gesture = feedback.key;
   thanksThumb.textContent = feedback.mark;
   thanksPanel.hidden = false;
-
-  setTimeout(setHash, AUTO_CLOSE_DELAY, { action: "close" });
-
-  void sendFeedback(payload);
+  
+  setHash(payload);
 }
 
-async function sendFeedback(payload) {
-  if (!FEEDBACK_POST_URL) {
-    console.info(
-      "Feedback POST skipped because FEEDBACK_POST_URL is not set.",
-      payload,
-    );
-    return;
-  }
-
-  try {
-    const response = await fetch(FEEDBACK_POST_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Feedback POST failed with status ${response.status}`);
-    }
-  } catch (error) {
-    console.warn("Unable to send feedback.", error);
-  }
-}
 
 function getBestGesture(gestureLists) {
   return gestureLists
