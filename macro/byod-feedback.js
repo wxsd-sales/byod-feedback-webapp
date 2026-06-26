@@ -37,13 +37,38 @@ const config = {
  * Configuration End
  **********************************************************/
 
+// Test-only override hook. Undefined in production, so workingConfig === config on-device.
+function mergeConfig(base, overrides) {
+  if (!overrides || typeof overrides !== "object") return base;
+  const result = { ...base };
+  for (const key of Object.keys(overrides)) {
+    if (key === "__proto__" || key === "constructor" || key === "prototype")
+      continue;
+    const value = overrides[key];
+    result[key] =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? mergeConfig(base[key] ?? {}, value)
+        : value;
+  }
+  return result;
+}
+
+const workingConfig = mergeConfig(
+  config,
+  globalThis.__BYOD_FEEDBACK_TEST_CONFIG__,
+);
+
 class EventMonitor {
   /**
    * @param {Function} onInactiveCallback - Called when the active session ends and no new session starts.
    * @param {number} durationThresholdMs - Minimum duration (in milliseconds) the session must have lasted to trigger the callback.
    */
   constructor(onInactiveCallback = null, durationThresholdMs = 0) {
-    this.activeSession = null;
+    // Concurrent sessions keyed by type. The survey is only triggered once the
+    // room is fully idle (no sessions remain active), so a lower-priority event
+    // ending while a higher-priority one continues (e.g. a presentation ending
+    // mid-call) will not prompt feedback prematurely.
+    this.activeSessions = new Map();
     this.sessionHistory = [];
 
     // Store the callback and threshold
@@ -51,6 +76,7 @@ class EventMonitor {
     this.durationThresholdMs = durationThresholdMs;
 
     this.priorities = {
+      webexShare: 4,
       call: 3,
       byod: 2,
       presentation: 1,
@@ -63,46 +89,32 @@ class EventMonitor {
       return;
     }
 
-    const now = Date.now();
-
-    if (this.activeSession) {
-      const currentPriority = this.priorities[this.activeSession.type];
-      const newPriority = this.priorities[type];
-
-      if (newPriority <= currentPriority) {
-        console.log(
-          `[Ignored] ${type} started, but ${this.activeSession.type} is active.`,
-        );
-        return;
-      }
-
-      console.log(
-        `[Interrupted] ${this.activeSession.type} interrupted by ${type}.`,
-      );
-      // Pass 'true' for _isInterruption so the inactive callback doesn't fire
-      this.endEvent(this.activeSession.type, now, true);
+    if (this.activeSessions.has(type)) {
+      console.log(`[Ignored] ${type} is already active.`);
+      return;
     }
 
-    this.activeSession = {
+    this.activeSessions.set(type, {
       type: type,
-      startTime: now,
+      startTime: Date.now(),
       details: details,
-    };
+    });
 
-    console.log(`[Started] Session: ${type}`);
+    console.log(
+      `[Started] Session: ${type} | Active sessions: ${this.activeSessions.size}`,
+    );
   }
 
   /**
-   * @param {string} type - 'call', 'byod', or 'presentation'
+   * @param {string} type - 'call', 'webexShare', 'byod', or 'presentation'
    * @param {number} [customEndTime] - Optional timestamp
-   * @param {boolean} [_isInterruption=false] - Internal flag to prevent callback during priority swaps
    */
-  endEvent(type, customEndTime = Date.now(), _isInterruption = false) {
-    if (!this.activeSession || this.activeSession.type !== type) {
-      return null;
-    }
+  endEvent(type, customEndTime = Date.now()) {
+    const session = this.activeSessions.get(type);
+    if (!session) return null;
 
-    const session = this.activeSession;
+    this.activeSessions.delete(type);
+
     const durationMs = customEndTime - session.startTime;
 
     const completedRecord = {
@@ -115,22 +127,32 @@ class EventMonitor {
     };
 
     this.sessionHistory.push(completedRecord);
-    this.activeSession = null; // Clear the active state
+
+    const roomIsIdle = this.activeSessions.size === 0;
 
     console.log(
-      `[Ended] Session: ${type} | Duration: ${completedRecord.durationSeconds}s`,
+      `[Ended] Session: ${type} | Duration: ${completedRecord.durationSeconds}s | Remaining sessions: ${this.activeSessions.size}`,
     );
 
-    // Check conditions for the callback:
-    // 1. Not an interruption (meaning no other event is taking over)
-    // 2. The session duration meets or exceeds the threshold
-    if (!_isInterruption && durationMs >= this.durationThresholdMs) {
+    // Only prompt for feedback once the room is fully idle (no other concurrent
+    // sessions remain, e.g. a presentation ending mid-call, or a BYOD session
+    // ending while a presentation continues) and the ended session lasted long
+    // enough to be meaningful.
+    if (roomIsIdle && durationMs >= this.durationThresholdMs) {
       if (typeof this.onInactiveCallback === "function") {
         this.onInactiveCallback(completedRecord);
       }
     }
 
     return completedRecord;
+  }
+
+  hasActiveSessions() {
+    return this.activeSessions.size > 0;
+  }
+
+  getActiveSessionTypes() {
+    return [...this.activeSessions.keys()];
   }
 
   getHistory() {
@@ -145,7 +167,9 @@ class EventMonitor {
   }
 }
 
-const monitor = new EventMonitor(processEndSession, config.duration);
+const monitor = new EventMonitor(processEndSession, workingConfig.duration);
+let emptyRoomTimeout;
+let autoCloseTimeout;
 
 function processEndSession(session) {
   console.log("Session Ended:", session);
@@ -154,26 +178,57 @@ function processEndSession(session) {
 }
 
 async function processWebViews({ URL }) {
+  if (typeof URL == "undefined") return;
+  if (!URL.startsWith(workingConfig.webAppUrl)) return;
   console.log("URL:", URL);
   if (!URL) return;
-  if (!URL.startsWith(config.webAppUrl)) return;
+  if (!URL.startsWith(workingConfig.webAppUrl)) return;
   const hashes = getHashes(URL);
   console.log("Hashes:", hashes);
   if (hashes?.action != "submit") return;
-  sendFeedback(hashes);
+  sendFeedback(hashes?.response);
   console.log("Clearing WebView");
   setTimeout(() => {
     xapi.Command.UserInterface.WebView.Clear({ Target: "OSD" });
   }, 3000);
 }
 
+async function processPeopleCount(count) {
+  if(typeof count == 'undefined') {
+    count = await xapi.Status.RoomAnalytics.PeopleCount.Current.get();
+  }
+  console.log("People Count :", count);
+  if (count > 0) return;
+  processEmptyRoomAutoClose();
+}
+
 async function processWebcamMode(mode) {
   console.log("Webcam Mode:", mode);
-  if (mode.startsWith('Streaming')) {
+  if (mode.startsWith("Streaming")) {
     monitor.startEvent("byod");
   } else {
     monitor.endEvent("byod");
   }
+}
+
+async function processAutoClose() {
+  clearTimeout(autoCloseTimeout);
+  autoCloseTimeout = setTimeout(() => {
+    closeWebView();
+  }, 60 * 1000);
+}
+
+async function processEmptyRoomAutoClose() {
+  clearTimeout(emptyRoomTimeout);
+  emptyRoomTimeout = setTimeout(() => {
+    closeWebView();
+  }, 10 * 1000);
+}
+
+async function closeWebView() {
+  if (!(await webviewOpen())) return;
+  console.log("Closing WebView");
+  xapi.Command.UserInterface.WebView.Clear({ Target: "OSD" });
 }
 
 async function processNumOfCalls(numOfCalls) {
@@ -181,19 +236,29 @@ async function processNumOfCalls(numOfCalls) {
 
   if (numOfCalls == 1) {
     const conference = await xapi.Status.Conference.get();
-    const meetingPlatform = conference.Call?.[0]?.MeetingPlatform;
     const sessionType = conference.Call?.[0]?.SessionType;
+
+    if (sessionType == "Share") {
+      // Handle Webex Proxity Sharing
+      monitor.startEvent("webexShare");
+      return;
+    }
+
+    const meetingPlatform = conference.Call?.[0]?.MeetingPlatform;
+
     const webexMeeting = conference.Call?.[0]?.SessionType;
     monitor.startEvent("call", { meetingPlatform, sessionType, webexMeeting });
     return;
   }
 
+  // No active calls — end whichever call-type session was running.
   monitor.endEvent("call");
+  monitor.endEvent("webexShare");
 }
 
 async function displaySurvey(session) {
   const hash = await generateHash(session);
-  const Url = config.webAppUrl + "#" + hash;
+  const Url = workingConfig.webAppUrl + "#" + hash;
   console.log("Displaying Survey - Url:", Url);
   xapi.Command.UserInterface.WebView.Display({
     Mode: "Modal",
@@ -201,19 +266,26 @@ async function displaySurvey(session) {
     Title: "Survey",
     Url,
   });
+
+  processAutoClose();
 }
 
-async function processPresentationMode(mode) {
-  console.log("Processing Presentation Mode:", mode);
+async function webviewOpen() {
+  const webviews = await xapi.Status.UserInterface.WebView.get();
+  return (
+    webviews.filter(({ URL }) => URL.startsWith(workingConfig.webAppUrl))
+      .length > 0
+  );
 }
 
-async function processAirPlayActivity(activity) {
-  console.log("Processing Air Play Activity:", activity);
-  if (activity) {
-    monitor.startEvent("presentation");
-  } else {
-    monitor.endEvent("presentation");
-  }
+
+async function processLocalPresentations() {
+  console.log("Processing Local Presentations");
+  const localInstances =
+    await xapi.Status.Conference.Presentation.LocalInstance.get();
+  console.log("Local Instances:", localInstances, typeof localInstances);
+  if (localInstances.length == 0) monitor.endEvent("presentation");
+  if (localInstances.length > 0) monitor.startEvent("presentation");
 }
 
 function extractFQDN(url) {
@@ -222,10 +294,10 @@ function extractFQDN(url) {
   return match ? match[1] : null;
 }
 
-async function generateHash(session) {
-  const result = { session };
-  result.feedbackUrl = config.feedbackUrl;
-  result.workspaceName = await xapi.Status.UserInterface.ContactInfo.Name.get();
+async function generateHash() {
+  const result = {
+    messagePrompt: workingConfig.messagePrompt,
+  };
   return btoa(JSON.stringify(result));
 }
 
@@ -234,23 +306,22 @@ async function getDeviceDetails() {
     workspaceName: await xapi.Status.UserInterface.ContactInfo.Name.get(),
     ipv4Address: await xapi.Status.Network[1].IPv4.Address.get(),
     ipv6Address: await xapi.Status.Network[1].IPv6.Address.get(),
-    deviceId: await xapi.Status.Webex.DeveloperId.get()
+    deviceId: await xapi.Status.Webex.DeveloperId.get(),
   };
   return deviceDetails;
 }
 
 async function sendFeedback(feedback) {
-
-  const deviceDetails = await getDeviceDetails();
+  const device = await getDeviceDetails();
   const lastSession = monitor.getLastSession();
   console.warn("Last Session:", lastSession);
 
   const Timeout = 10;
-  const Url = config.feedback.url;
-  const body = JSON.stringify({ deviceDetails, lastSession, feedback });
+  const Url = workingConfig.feedback.url;
+  const body = JSON.stringify({ device, lastSession, feedback });
   const Header = [
     "Content-Type: application/json",
-    "Authorization: Bearer " + config.feedback.apiKey,
+    "Authorization: Bearer " + workingConfig.feedback.apiKey,
   ];
   const ResultBody = "PlainText";
 
@@ -277,22 +348,30 @@ function getHashes(url) {
 }
 
 function log(message) {
-  if (config.debug) {
+  if (workingConfig.debug) {
     console.log(message);
   }
 }
 
 async function init() {
-  const Hostname = extractFQDN(config.webAppUrl);
+  const Hostname = extractFQDN(workingConfig.webAppUrl);
+  if (Hostname == null)
+    throw Error("Count not extract hostname from web app url");
   console.log("Adding Camera MediaAccess for Hostname:", Hostname);
-  xapi.Config.WebEngine.Mode.set("On");
-  xapi.Config.HttpClient.Mode.set("On");
   xapi.Command.WebEngine.MediaAccess.Add({ Device: "Camera", Hostname });
 
+  xapi.Config.WebEngine.Mode.set("On");
+  xapi.Config.HttpClient.Mode.set("On");
+
+  xapi.Status.RoomAnalytics.PeopleCount.Current.on(processPeopleCount);
+
+  xapi.Status.Conference.Presentation.LocalInstance.on(
+    processLocalPresentations,
+  );
+
   xapi.Status.SystemUnit.State.NumberOfActiveCalls.on(processNumOfCalls);
+
   xapi.Status.Video.Output.Webcam.Mode.on(processWebcamMode);
-  xapi.Status.Conference.Presentation.Mode.on(processPresentationMode);
-  xapi.Status.Video.Input.AirPlay.Activity.on(processAirPlayActivity);
 
   xapi.Status.UserInterface.WebView.on(processWebViews);
 
@@ -303,13 +382,7 @@ async function init() {
   const webcamStatus = await xapi.Status.Video.Output.Webcam.Mode.get();
   processWebcamMode(webcamStatus);
 
-  const presentationMode = await xapi.Status.Conference.Presentation.Mode.get();
-  processPresentationMode(presentationMode);
-
-  const airPlayActivity = await xapi.Status.Video.Input.AirPlay.Activity.get();
-  processAirPlayActivity(airPlayActivity);
-
-  
+  processLocalPresentations();
 }
 
 init();

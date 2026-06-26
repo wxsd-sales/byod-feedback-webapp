@@ -291,12 +291,14 @@ function completeFeedback() {
   const feedback = FEEDBACK_BY_GESTURE[holdGesture.categoryName];
   const payload = {
     action: "submit",
-    feedback: feedback.value,
-    label: feedback.label,
-    gesture: holdGesture.categoryName,
-    confidence: Number(holdScore.toFixed(4)),
-    heldForMs: HOLD_DURATION_MS,
-    collectedAt: new Date().toISOString(),
+    response: {
+      feedback: feedback.value,
+      label: feedback.label,
+      gesture: holdGesture.categoryName,
+      confidence: Number(holdScore.toFixed(4)),
+      heldForMs: HOLD_DURATION_MS,
+      collectedAt: new Date().toISOString(),
+    },
   };
 
   stopCamera();
@@ -307,10 +309,9 @@ function completeFeedback() {
   thanksPanel.dataset.gesture = feedback.key;
   thanksThumb.textContent = feedback.mark;
   thanksPanel.hidden = false;
-  
+
   setHash(payload);
 }
-
 
 function getBestGesture(gestureLists) {
   return gestureLists
@@ -340,6 +341,6 @@ function setHash(params = {}) {
       hashes[key] = params[key];
     }
   }
-  console.log('Setting Hash To:', JSON.stringify(hashes))
+  console.log("Setting Hash To:", JSON.stringify(hashes));
   window.location.hash = "#" + btoa(JSON.stringify(hashes));
 }
