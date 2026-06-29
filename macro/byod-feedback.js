@@ -23,13 +23,17 @@ import xapi from "xapi";
  **********************************************************/
 
 const config = {
-  messagePrompt: "Where you satisfied with this Meeting Room Experience?",
+  messagePrompt: "Were you satisfied with this Meeting Room Experience?",
   webAppUrl: "https://wxsd-sales.github.io/byod-feedback-webapp/webapp",
   feedback: {
     url: "https://your-backend.example.com/feedback",
     apiKey: "your-api-key",
   },
-  duration: 1,
+  timers: {
+    autoCloseSeconds: 60,
+    emptyRoomAutoCloseSeconds: 10,
+    meetingDurationSeconds: 180,
+  },
   debug: true,
 };
 
@@ -85,12 +89,12 @@ class EventMonitor {
 
   startEvent(type, details = {}) {
     if (!this.priorities.hasOwnProperty(type)) {
-      console.warn(`[Warning] Unknown event type: ${type}`);
+      warn(`[Warning] Unknown event type: ${type}`);
       return;
     }
 
     if (this.activeSessions.has(type)) {
-      console.log(`[Ignored] ${type} is already active.`);
+      log(`[Ignored] ${type} is already active.`);
       return;
     }
 
@@ -100,7 +104,7 @@ class EventMonitor {
       details: details,
     });
 
-    console.log(
+    log(
       `[Started] Session: ${type} | Active sessions: ${this.activeSessions.size}`,
     );
   }
@@ -130,7 +134,7 @@ class EventMonitor {
 
     const roomIsIdle = this.activeSessions.size === 0;
 
-    console.log(
+    log(
       `[Ended] Session: ${type} | Duration: ${completedRecord.durationSeconds}s | Remaining sessions: ${this.activeSessions.size}`,
     );
 
@@ -167,43 +171,53 @@ class EventMonitor {
   }
 }
 
-const monitor = new EventMonitor(processEndSession, workingConfig.duration);
+const monitor = new EventMonitor(
+  processEndSession,
+  workingConfig.timers.meetingDurationSeconds * 1000,
+);
+const debounce = (func, delay) => {
+  let timeout;
+  return (...args) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), delay);
+  };
+};
+
 let emptyRoomTimeout;
 let autoCloseTimeout;
 
 function processEndSession(session) {
-  console.log("Session Ended:", session);
-
+  log("Session Ended:", session);
   displaySurvey(session);
 }
 
 async function processWebViews({ URL }) {
   if (typeof URL == "undefined") return;
   if (!URL.startsWith(workingConfig.webAppUrl)) return;
-  console.log("URL:", URL);
+  debug("Processing WebView URL:", URL);
   if (!URL) return;
   if (!URL.startsWith(workingConfig.webAppUrl)) return;
   const hashes = getHashes(URL);
-  console.log("Hashes:", hashes);
+  debug("Hashes:", hashes);
   if (hashes?.action != "submit") return;
   sendFeedback(hashes?.response);
-  console.log("Clearing WebView");
+  debug("Clearing WebView");
   setTimeout(() => {
     xapi.Command.UserInterface.WebView.Clear({ Target: "OSD" });
   }, 3000);
 }
 
 async function processPeopleCount(count) {
-  if(typeof count == 'undefined') {
+  if (typeof count == "undefined") {
     count = await xapi.Status.RoomAnalytics.PeopleCount.Current.get();
   }
-  console.log("People Count :", count);
+  debug("People Count :", count);
   if (count > 0) return;
   processEmptyRoomAutoClose();
 }
 
 async function processWebcamMode(mode) {
-  console.log("Webcam Mode:", mode);
+  debug("Webcam Mode:", mode);
   if (mode.startsWith("Streaming")) {
     monitor.startEvent("byod");
   } else {
@@ -211,32 +225,37 @@ async function processWebcamMode(mode) {
   }
 }
 
-async function processAutoClose() {
+async function startAutoClose() {
+  debug("Starting Auto Close");
   clearTimeout(autoCloseTimeout);
   autoCloseTimeout = setTimeout(() => {
+    debug("Auto Close Timeout");
     closeWebView();
-  }, 60 * 1000);
+  }, workingConfig.timers.autoCloseSeconds * 1000);
 }
 
 async function processEmptyRoomAutoClose() {
   clearTimeout(emptyRoomTimeout);
+
   emptyRoomTimeout = setTimeout(() => {
     closeWebView();
-  }, 10 * 1000);
+  }, workingConfig.timers.emptyRoomAutoCloseSeconds * 1000);
 }
 
 async function closeWebView() {
   if (!(await webviewOpen())) return;
-  console.log("Closing WebView");
-  xapi.Command.UserInterface.WebView.Clear({ Target: "OSD" });
+  debug("Closing WebView");
+  return xapi.Command.UserInterface.WebView.Clear({ Target: "OSD" });
 }
 
 async function processNumOfCalls(numOfCalls) {
-  console.log("Number of Active Calls:", numOfCalls);
+  debug("Number of Active Calls:", numOfCalls);
 
   if (numOfCalls == 1) {
     const conference = await xapi.Status.Conference.get();
-    const sessionType = conference.Call?.[0]?.SessionType;
+
+    const call = conference.Call?.[0];
+    const sessionType = call?.SessionType;
 
     if (sessionType == "Share") {
       // Handle Webex Proxity Sharing
@@ -244,9 +263,10 @@ async function processNumOfCalls(numOfCalls) {
       return;
     }
 
-    const meetingPlatform = conference.Call?.[0]?.MeetingPlatform;
+    const meetingPlatform = call?.MeetingPlatform;
 
-    const webexMeeting = conference.Call?.[0]?.SessionType;
+    const webexMeeting = call?.Meeting;
+
     monitor.startEvent("call", { meetingPlatform, sessionType, webexMeeting });
     return;
   }
@@ -259,7 +279,8 @@ async function processNumOfCalls(numOfCalls) {
 async function displaySurvey(session) {
   const hash = await generateHash(session);
   const Url = workingConfig.webAppUrl + "#" + hash;
-  console.log("Displaying Survey - Url:", Url);
+  debug("Displaying Survey - Url:", Url);
+  log("Displaying Survey");
   xapi.Command.UserInterface.WebView.Display({
     Mode: "Modal",
     Target: "OSD",
@@ -267,23 +288,23 @@ async function displaySurvey(session) {
     Url,
   });
 
-  processAutoClose();
+  startAutoClose();
 }
 
 async function webviewOpen() {
   const webviews = await xapi.Status.UserInterface.WebView.get();
+  debug("Webviews:", webviews);
   return (
     webviews.filter(({ URL }) => URL.startsWith(workingConfig.webAppUrl))
       .length > 0
   );
 }
 
-
 async function processLocalPresentations() {
-  console.log("Processing Local Presentations");
+  debug("Processing Local Presentations");
   const localInstances =
     await xapi.Status.Conference.Presentation.LocalInstance.get();
-  console.log("Local Instances:", localInstances, typeof localInstances);
+  debug("Local Instances:", localInstances.length);
   if (localInstances.length == 0) monitor.endEvent("presentation");
   if (localInstances.length > 0) monitor.startEvent("presentation");
 }
@@ -314,7 +335,7 @@ async function getDeviceDetails() {
 async function sendFeedback(feedback) {
   const device = await getDeviceDetails();
   const lastSession = monitor.getLastSession();
-  console.warn("Last Session:", lastSession);
+  warn("Last Session:", lastSession);
 
   const Timeout = 10;
   const Url = workingConfig.feedback.url;
@@ -325,15 +346,25 @@ async function sendFeedback(feedback) {
   ];
   const ResultBody = "PlainText";
 
+  debug("Sending feedback to:", Url);
+  debug("Body:", body);
+  debug("Header:", Header);
+  debug("ResultBody:", ResultBody);
+  debug("Timeout:", Timeout);
+
   try {
     const response = await xapi.Command.HttpClient.Post(
       { Header, ResultBody, Timeout, Url },
       body,
     );
+    debug("Feedback sent successfully");
+    alert("Feedback sent successfully", 10);
   } catch (error) {
-    console.warn("Unable to send feedback.", error);
+    warn("Unable to send feedback.", error);
+    alert("Unable to send feedback. Please try again later.", 10);
   }
 }
+
 
 function getHashes(url) {
   if (!url) return;
@@ -342,47 +373,92 @@ function getHashes(url) {
   try {
     return JSON.parse(atob(hashString));
   } catch (error) {
-    console.warn("Unable to parse hash parameters.", error);
+    warn("Unable to parse hash parameters.", error);
     return;
   }
 }
 
-function log(message) {
-  if (workingConfig.debug) {
-    console.log(message);
-  }
+function alert(Text='', Duration = 10) {
+  debug("Displaying Alert", "\nText:", Text, "\nDuration:", Duration);
+  xapi.Command.UserInterface.Message.Alert.Display({
+    Title: 'BYOD Feedback',
+    Text,
+    Duration,
+  });
+}
+function log(...args) {
+  console.log(...args);
+}
+
+function warn(...args) {
+  console.warn(...args);
+}
+
+function debug(...args) {
+  if (!workingConfig.debug) return;
+  console.debug(...args);
 }
 
 async function init() {
   const Hostname = extractFQDN(workingConfig.webAppUrl);
   if (Hostname == null)
     throw Error("Count not extract hostname from web app url");
-  console.log("Adding Camera MediaAccess for Hostname:", Hostname);
+  debug("Adding Camera MediaAccess for Hostname:", Hostname);
+  // Ensure Camera MediaAccess is added
   xapi.Command.WebEngine.MediaAccess.Add({ Device: "Camera", Hostname });
 
+  // Enable WebEngine and HttpClient
   xapi.Config.WebEngine.Mode.set("On");
   xapi.Config.HttpClient.Mode.set("On");
 
+  // Subscribe to People Count
   xapi.Status.RoomAnalytics.PeopleCount.Current.on(processPeopleCount);
-
+ 
+  // Subscribe to Local Presentations with a debounce of 1 second
+  const debouncedProcessLocalPresentations = debounce(processLocalPresentations, 1000);
   xapi.Status.Conference.Presentation.LocalInstance.on(
-    processLocalPresentations,
+    debouncedProcessLocalPresentations,
   );
 
+  // Subscribe to Number of Active Calls
   xapi.Status.SystemUnit.State.NumberOfActiveCalls.on(processNumOfCalls);
 
-  xapi.Status.Video.Output.Webcam.Mode.on(processWebcamMode);
-
+  // Subscribe to WebView changes
   xapi.Status.UserInterface.WebView.on(processWebViews);
 
+  // Get the number of active calls
   const numOfCalls =
     await xapi.Status.SystemUnit.State.NumberOfActiveCalls.get();
-  processNumOfCalls(numOfCalls);
+  
+  // Process the number of active calls
+  await processNumOfCalls(numOfCalls);
 
-  const webcamStatus = await xapi.Status.Video.Output.Webcam.Mode.get();
-  processWebcamMode(webcamStatus);
+  // Get the webcam mode
+  const videoOutput = await xapi.Status.Video.Output.get();
+  const webcamMode = videoOutput?.Webcam?.Mode;
+  // If the webcam mode is defined, subscribe to webcam mode changes and process the webcam mode
+  if(typeof webcamMode != 'undefined') {
+    xapi.Status.Video.Output.Webcam.Mode.on(processWebcamMode);
+    await processWebcamMode(webcamMode)
 
-  processLocalPresentations();
+  }
+
+  // Finally, process current local presentations
+  await processLocalPresentations();
 }
 
-init();
+// Initialize the macro
+// Check if webview is still open before initializing
+// Close the Check if the webview is still open
+webviewOpen()
+.then(async (isOpen) => {
+  debug("Webview is still open:", isOpen);
+  if (!isOpen) return init();
+  await closeWebView();
+  setTimeout(init, 1000);
+})
+.catch(async (error) => {
+  warn("Error initializing macro:", error);
+  alert("Error initializing macro:", error);
+  init();
+});

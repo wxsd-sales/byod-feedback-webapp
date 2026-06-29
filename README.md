@@ -1,6 +1,6 @@
 # BYOD Feedback Web App
 
-This is an example web app shows how to collect meeting room feedback from Cisco BYOD collaboration spaces where a Touch Controller isn't available by using thumbs up 👍 and down 👎 guestures.
+This is an example web app that shows how to collect meeting room feedback from Cisco BYOD collaboration spaces where a Touch Controller isn't available by using thumbs up 👍 and down 👎 gestures.
 
 ![webapp startup](screenshots/screenshot-startup.png)
 
@@ -10,28 +10,56 @@ The solution consists of two parts:
 
 ### Post Meeting Macro:
 
-The [byod-feedback](macro/byod-feedback.js) post meeting macro launches the feedback web app after a meeting or BYOD session disconnects, allowing users to give feedback directly from the room display. The macro appends workspace and meeting details to the web apps url as hash parameters which are JSON Base64 encode
+The [byod-feedback](macro/byod-feedback.js) post meeting macro launches the feedback web app after a meeting or BYOD session disconnects, allowing users to give feedback directly from the room display. Once the web app has collected feedback from the user, it appends the feedback to the end of its URL where the macro can then process this feedback and send it to your desired backend via the xAPI HTTP Client xCommand.
 
-By default, the macro will share the follow details
+Sequence: [Session Ends] -> [Web App Launched] -> [Feedback Collected] -> [Feedback Posted]
 
-- `workspaceName` - eg: "Meeting Room 1"
-- `meetingType` - eg: "BYOD" or "Webex"
-- `duration` - duration of meeting in minutes
-- `feedbackUrl` - where the the web app should post the collected feedback
+Example Feedback:
+
+```json
+{
+  "device": {
+    "workspaceName": "Meeting Room 1",
+    "ipv4Address": "192.168.1.100",
+    "ipv6Address": "",
+    "deviceId": "1234567890"
+  },
+  "lastSession": {
+    "type": "call",
+    "details": {
+      "meetingPlatform": "Unknown",
+      "sessionType": "Call",
+      "webexMeeting": "False"
+    },
+    "startTime": "2026-06-29T14:30:01.798Z",
+    "endTime": "2026-06-29T14:33:01.798Z",
+    "durationSeconds": 180,
+    "durationMs": 180000
+  },
+  "feedback": {
+    "feedback": "satisfied",
+    "label": "Satisfied",
+    "gesture": "Thumb_Up",
+    "confidence": 0.7694,
+    "heldForMs": 5000,
+    "collectedAt": "2026-06-24T13:55:40.363Z"
+  }
+}
+```
 
 ### Static Web App:
 
-Upon opening web app accesses the Cisco Devices web camera and processes the video captured of the room though a [MediaPipe Gesture Recognizer](https://ai.google.dev/edge/mediapipe/solutions/vision/gesture_recognizer). No video capture leaves the devices, and captured video is processed in the browser on the Cisco Device.
+Upon opening, the web app accesses the Cisco Device's web camera and processes the video captured of the room through a [MediaPipe Gesture Recognizer](https://ai.google.dev/edge/mediapipe/solutions/vision/gesture_recognizer). No video capture leaves the device, and captured video is processed in the browser on the Cisco Device.
 
-#### Hold Guesture Countdown:
+#### Hold Gesture Countdown:
 
-When the user is detected as guesturing a thumbs up or thumbs down, a countdown is shown for a set time until the guesture is accepted.
+When the user is detected as gesturing a thumbs up or thumbs down, a countdown is shown for a set time until the gesture is accepted.
 
 ![webapp countdown](screenshots/screenshot-countdown.png)
 
 #### Feedback Captured Success:
 
-Once the feedback is captured, the web app then showss a success screen. In the background, the collected feedback, workspace and meeting details are sent to your choice of backend service via a browser based HTTP POST.
+Once the feedback is captured, the web app then shows a success screen. In the background, the web app is updating its Url hash parameters with the collected feedback, where the macro will take this feedback and bundle it with the devices details and the last session details and POST them to your backend.
 
 ![webapp countdown](screenshots/screenshot-success.png)
 
@@ -57,69 +85,63 @@ https://wxsd-sales.github.io/byod-feedback-webapp/webapp
 
    ```js
    const config = {
+     messagePrompt: "Were you satisfied with this Meeting Room Experience?",
      webAppUrl: "https://wxsd-sales.github.io/byod-feedback-webapp/webapp",
-     feedbackUrl: "https://your-backend.example.com/feedback",
-     duration: 1,
+     feedback: {
+       url: "https://your-backend.example.com/feedback",
+       apiKey: "your-api-key",
+     },
+     timers: {
+       autoCloseSeconds: 60,
+       emptyRoomAutoCloseSeconds: 10,
+       meetingDurationSeconds: 180,
+     },
+     debug: true,
    };
    ```
 
 5. Save and enable the macro.
 
-Notes:
-
-- The macro automatically adds camera media access for the web app host via the xCommand:
-  [xCommand WebEngine MediaAccess Add](https://roomos.cisco.com/xapi/Command.WebEngine.MediaAccess.Add/)
-
-- In order to avoid frequent pop ups of the survey, the macro leverages a minunm meeting or BYOD session duration before the servey is displays. This can be configured in via the macros config `duration` value which is so to `1` minute by default.
+> [!WARNING]
+>
+> The macro makes the following configuration changes to your device:
+>
+> - [xConfiguration WebEngine Mode: On](https://roomos.cisco.com/xapi/Configuration.WebEngine.Mode/)
+>
+>   Required to show the feedback web app
+>
+> - [xConfiguration HttpClient Mode: On](https://roomos.cisco.com/xapi/Configuration.HttpClient.Mode/)
+>
+>   Required for sending the collected feedback to your backend
+>
+> - [xCommand WebEngine MediaAccess Add](https://roomos.cisco.com/xapi/Command.WebEngine.MediaAccess.Add/)
+>
+>   Gives the web app domain access to the device's web cam
 
 ## Feedback Backend
 
-The feedback POST endpoint can be provided in either of two ways:
+This macro leverages the xAPI HTTP Client xCommand to POST the collected feedback. This is as opposed to sending the collected feedback from the web app directly and potentially hitting CORS (Cross-Origin Resource Sharing) related blockers.
 
-- **Recommended for RoomOS deployments:** set `feedbackUrl` in the macro `config`. The macro includes this value in the hash parameters it appends to the web app URL, so the hosted web app can send feedback to your backend without changing the hosted app code.
-- **Recommended for self-hosted/custom builds:** set `WEB_APP_FEEDBACK_URL` directly in [webapp/app.js](webapp/app.js). This is useful when the web app is hosted in your own environment and should always post to the same backend.
-
-Macro-provided `feedbackUrl` takes priority. If it is not present, the web app falls back to `WEB_APP_FEEDBACK_URL`. If neither value is set, the web app logs the captured feedback locally and skips network submission.
+Review the macro config and configure your backend URL and any API Key you may have by configuring `feedback.url` and `feedback.apiKey` in the macro config.
 
 Macro configuration example:
 
 ```js
 const config = {
+  messagePrompt: "Were you satisfied with this Meeting Room Experience?",
   webAppUrl: "https://wxsd-sales.github.io/byod-feedback-webapp/webapp",
-  feedbackUrl: "https://your-backend.example.com/feedback",
-  duration: 1,
+  feedback: {
+    url: "https://your-backend.example.com/feedback",
+    apiKey: "your-api-key",
+  },
+  timers: {
+    autoCloseSeconds: 60,
+    emptyRoomAutoCloseSeconds: 10,
+    meetingDurationSeconds: 180,
+  },
+  debug: true,
 };
 ```
-
-Web app configuration example:
-
-```js
-const WEB_APP_FEEDBACK_URL = "https://your-backend.example.com/feedback";
-```
-
-The app sends a JSON payload with the feedback value, display label, detected gesture, recognition confidence, hold duration, and collection timestamp.
-
-It also shares any other details shared to the Web App by the macro souch as Workspace Name, Meeting Platform, Session Type, Webex Meeting Boolean and Duration of session or meeeting.
-
-```json
-{
-  "feedback": "satisfied",
-  "label": "Satisfied",
-  "gesture": "Thumb_Up",
-  "confidence": 0.9142,
-  "heldForMs": 5000,
-  "collectedAt": "2026-05-20T12:34:56.789Z",
-  "deviceDetails": {
-    "workspaceName": "Meeting Room 1",
-    "meetingPlatform": "Unknown | GoogleMeet | MSTeams | Webex | Zoom",
-    "sessionType": "Call | Share | InstantMeeting",
-    "webexMeeting": "True | False",
-    "duration": 10
-  }
-}
-```
-
-When using the macro, the web app URL can also include room and meeting context in the hash parameters, such as `workspaceName`, `meetingPlatform`, `sessionType`, `webexMeeting`, `duration`, and `feedbackUrl`.
 
 ## Hosting Your Own Copy
 

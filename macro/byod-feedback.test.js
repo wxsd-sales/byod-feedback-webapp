@@ -28,18 +28,29 @@ const testConfig = {
     url: "https://your-backend.example.com/feedback",
     apiKey: "your-api-key",
   },
-  duration: 1,
+  timers: {
+    autoCloseSeconds: 60,
+    emptyRoomAutoCloseSeconds: 10,
+    meetingDurationSeconds: 180,
+  },
   debug: true,
 };
 
+const shortMeetingDuration =
+  testConfig.timers.meetingDurationSeconds * 1000 - 1000;
+const longMeetingDuration =
+  testConfig.timers.meetingDurationSeconds * 1000 + 1000;
+
 const mockFeedback = {
   action: "submit",
-  feedback: "satisfied",
-  label: "Satisfied",
-  gesture: "Thumb_Up",
-  confidence: 0.7694,
-  heldForMs: 5000,
-  collectedAt: "2026-06-24T13:55:40.363Z",
+  response: {
+    feedback: "satisfied",
+    label: "Satisfied",
+    gesture: "Thumb_Up",
+    confidence: 0.7694,
+    heldForMs: 5000,
+    collectedAt: "2026-06-24T13:55:40.363Z",
+  },
 };
 
 const mockCallSession = {
@@ -71,10 +82,9 @@ const mockPresentationSession = {
   durationMs: 5000,
 };
 
-async function loadMacro(xapi, productPlatform, configOverrides = {}) {
+async function loadMacro(xapi, productPlatform, url) {
   globalThis.__BYOD_FEEDBACK_TEST_CONFIG__ = {
-    ...(globalThis.__BYOD_FEEDBACK_TEST_CONFIG__ ?? {}),
-    ...configOverrides,
+    ...(globalThis.__BYOD_FEEDBACK_TEST_CONFIG__ ?? {})
   };
 
   xapi.Status.SystemUnit.ProductPlatform.set(productPlatform);
@@ -84,6 +94,12 @@ async function loadMacro(xapi, productPlatform, configOverrides = {}) {
   xapi.Status.UserInterface.ContactInfo.Name.set(
     mockDeviceDetails.workspaceName,
   );
+
+  if (typeof url !== "undefined") {
+    xapi.Status.UserInterface.WebView.get.mockReturnValue([{ URL: url }]);
+  } else {
+    xapi.Status.UserInterface.WebView.get.mockReturnValue([]);
+  }
 
   xapi.Status.Conference.Presentation.LocalInstance.get.mockReturnValue([]);
 
@@ -99,8 +115,14 @@ async function flushPromises() {
 }
 
 async function startCallSession(xapi) {
-  xapi.Status.Conference.Call[1].SessionType.set("Call");
-  xapi.Status.Conference.Call[1].MeetingPlatform.set("Unknown");
+  const { webexMeeting, sessionType, meetingPlatform } =
+    mockCallSession.details;
+  console.warn("Meeting", webexMeeting);
+  console.warn("SessionType", sessionType);
+  console.warn("MeetingPlatform", meetingPlatform);
+  xapi.Status.Conference.Call[1].Meeting.set(webexMeeting);
+  xapi.Status.Conference.Call[1].SessionType.set(sessionType);
+  xapi.Status.Conference.Call[1].MeetingPlatform.set(meetingPlatform);
   xapi.Status.SystemUnit.State.NumberOfActiveCalls.set(1);
 }
 
@@ -118,13 +140,16 @@ async function endByodSession(xapi) {
 }
 
 async function startLocalPresentationSession(xapi) {
-  xapi.Status.Conference.Presentation.LocalInstance.get.mockReturnValue([{
-    SendingMode: "LocalOnly",
-    Source: 1,
-  }]);
-  xapi.Status.Conference.Presentation.LocalInstance[1].SendingMode.set('LocalOnly');
+  xapi.Status.Conference.Presentation.LocalInstance.get.mockReturnValue([
+    {
+      SendingMode: "LocalOnly",
+      Source: 1,
+    },
+  ]);
+  xapi.Status.Conference.Presentation.LocalInstance[1].SendingMode.set(
+    "LocalOnly",
+  );
   xapi.Status.Conference.Presentation.LocalInstance[1].Source.set(1);
-  
 }
 
 async function endLocalPresentationSession(xapi) {
@@ -144,40 +169,42 @@ async function endWebexPresentationSession(xapi) {
 async function updateWebViewUrl(xapi, baseUrl, response = mockFeedback) {
   const hash = btoa(JSON.stringify(response));
   const url = baseUrl + "#" + hash;
+  xapi.Status.UserInterface.WebView.get.mockReturnValue([{ URL: url }]);
   xapi.Status.UserInterface.WebView[1].URL.set(url);
+  await flushPromises();
+}
+
+async function getWebViewBaseUrl(xapi) {
+  const webviewDisplayCall =
+    xapi.Command.UserInterface.WebView.Display.mock.calls.pop();
+  const webviewUrl = webviewDisplayCall?.[0]?.Url;
+  if (!webviewUrl) return;
+  const webviewUrlbase = webviewUrl.split("#")[0];
+  return webviewUrlbase;
 }
 
 async function getResponseFromWebView(xapi) {
-  const webviewDisplayCall =
-        xapi.Command.UserInterface.WebView.Display.mock.calls.pop();
-  
-        const webviewUrl = webviewDisplayCall?.[0]?.Url;
+  const webviewUrlbase = await getWebViewBaseUrl(xapi);
 
-        if(!webviewUrl) return;
+  if (!webviewUrlbase) return;
 
+  await updateWebViewUrl(xapi, webviewUrlbase);
 
+  await flushPromises();
 
-      const webviewUrlbase = webviewUrl.split("#")[0];
+  expect(xapi.Command.HttpClient.Post).toHaveBeenCalled();
 
-      if(!webviewUrl) return;
+  const httpPostCall = xapi.Command.HttpClient.Post.mock.calls.pop();
 
-      updateWebViewUrl(xapi, webviewUrlbase);
+  const body = httpPostCall?.[1];
 
-      await flushPromises();
+  expect(body).toBeDefined();
 
-      expect(xapi.Command.HttpClient.Post).toHaveBeenCalled();
+  const payload = JSON.parse(body);
 
-      const httpPostCall = xapi.Command.HttpClient.Post.mock.calls.pop();
+  expect(payload).toBeDefined();
 
-      const body = httpPostCall?.[1];
-
-      expect(body).toBeDefined();
-
-      const payload = JSON.parse(body);
-
-      expect(payload).toBeDefined();
-
-      return payload;
+  return payload;
 }
 
 function getDisplayedSurveyUrl(xapi) {
@@ -190,6 +217,8 @@ function getDisplayedSurveyUrl(xapi) {
 async function openDisplayedSurvey(xapi) {
   const url = getDisplayedSurveyUrl(xapi);
   if (!url) throw new Error("No survey webview was displayed");
+
+  xapi.Status.UserInterface.WebView.get.mockReturnValue([{ URL: url }]);
   xapi.Status.UserInterface.WebView[1].URL.set(url);
   await flushPromises();
 }
@@ -198,7 +227,7 @@ async function openDisplayedSurvey(xapi) {
 async function displaySurveyViaCall(xapi) {
   startCallSession(xapi);
   await flushPromises();
-  jest.advanceTimersByTime(3 * 60 * 1000);
+  jest.advanceTimersByTime(testConfig.timers.meetingDurationSeconds * 1000);
   endCallSession(xapi);
   await flushPromises();
 }
@@ -236,14 +265,14 @@ supportedDevices.forEach((productPlatform) => {
     it("macro ignore short calls or meetings", async () => {
       const { default: xapi } = await import("xapi");
       xapi.reset();
-      await loadMacro(xapi, productPlatform );
+      await loadMacro(xapi, productPlatform);
       xapi.clearCallHistory();
 
       startCallSession(xapi);
 
       expect(xapi.Status.Conference.get).toHaveBeenCalled();
 
-      jest.advanceTimersByTime(1);
+      jest.advanceTimersByTime(shortMeetingDuration);
 
       endCallSession(xapi);
 
@@ -258,7 +287,7 @@ supportedDevices.forEach((productPlatform) => {
     it("macro processes long calls or meetings", async () => {
       const { default: xapi } = await import("xapi");
       xapi.reset();
-      await loadMacro(xapi, productPlatform );
+      await loadMacro(xapi, productPlatform);
       xapi.clearCallHistory();
 
       startCallSession(xapi);
@@ -267,7 +296,7 @@ supportedDevices.forEach((productPlatform) => {
 
       await flushPromises();
 
-      jest.advanceTimersByTime(3 * 60 * 1000);
+      jest.advanceTimersByTime(longMeetingDuration);
 
       endCallSession(xapi);
 
@@ -287,7 +316,7 @@ supportedDevices.forEach((productPlatform) => {
 
       startByodSession(xapi);
 
-      jest.advanceTimersByTime(2 * 60 * 1000);
+      jest.advanceTimersByTime(longMeetingDuration);
       await flushPromises();
 
       endByodSession(xapi);
@@ -307,21 +336,24 @@ supportedDevices.forEach((productPlatform) => {
       xapi.clearCallHistory();
 
       startLocalPresentationSession(xapi);
-      
-      
       await flushPromises();
-      jest.advanceTimersByTime(2 * 60 * 1000);
 
+      jest.advanceTimersByTime(1000);
+      await flushPromises();
+
+      // Meeting duration elapses while the presentation is active.
+      jest.advanceTimersByTime(longMeetingDuration);
       endLocalPresentationSession(xapi);
+      await flushPromises();
 
+      // Advance past the debounce again so the presentation end is registered.
+      jest.advanceTimersByTime(1000);
       await flushPromises();
 
       expect(xapi.Command.UserInterface.WebView.Display).toHaveBeenCalled();
 
-
       const response = await getResponseFromWebView(xapi);
       expect(response?.lastSession?.type).toEqual("presentation");
-
     });
 
     it("does not show the survey when a presentation ends while still on a call", async () => {
@@ -333,13 +365,20 @@ supportedDevices.forEach((productPlatform) => {
       // Call is running.
       startCallSession(xapi);
       await flushPromises();
-      jest.advanceTimersByTime(3 * 60 * 1000);
+      jest.advanceTimersByTime(longMeetingDuration);
 
       // A local presentation starts and then ends, all while still on the call.
       startLocalPresentationSession(xapi);
-      await flushPromises();
+
+      // Wait 30 seconds ( includes debounce time )
       jest.advanceTimersByTime(30 * 1000);
+      await flushPromises();
+
       endLocalPresentationSession(xapi);
+
+      // Wait 1 second to handle debounce
+      await flushPromises();
+      jest.advanceTimersByTime(1000);
       await flushPromises();
 
       // Survey must not show because the call is still active.
@@ -364,7 +403,10 @@ supportedDevices.forEach((productPlatform) => {
       // A local presentation is running.
       startLocalPresentationSession(xapi);
       await flushPromises();
-      jest.advanceTimersByTime(2 * 60 * 1000);
+      // Wait 1 second to handle debounce
+      jest.advanceTimersByTime(1000);
+      await flushPromises();
+      jest.advanceTimersByTime(longMeetingDuration);
 
       // A BYOD (laptop) session starts and then ends while presenting continues.
       startByodSession(xapi);
@@ -378,6 +420,9 @@ supportedDevices.forEach((productPlatform) => {
 
       // Once the presentation ends and the room is idle, the survey is shown.
       endLocalPresentationSession(xapi);
+      await flushPromises();
+      // Wait 1 second to handle debounce
+      jest.advanceTimersByTime(1000);
       await flushPromises();
 
       expect(xapi.Command.UserInterface.WebView.Display).toHaveBeenCalled();
@@ -400,14 +445,16 @@ supportedDevices.forEach((productPlatform) => {
       await openDisplayedSurvey(xapi);
 
       // Still open just before the 60s inactivity timeout.
-      jest.advanceTimersByTime(59 * 1000);
+      jest.advanceTimersByTime(
+        testConfig.timers.autoCloseSeconds * 1000 - 1000,
+      );
       await flushPromises();
-      expect(
-        xapi.Command.UserInterface.WebView.Clear,
-      ).not.toHaveBeenCalled();
+      expect(xapi.Command.UserInterface.WebView.Clear).not.toHaveBeenCalled();
 
       // Auto-closes once the timeout elapses.
-      jest.advanceTimersByTime(1 * 1000);
+      jest.advanceTimersByTime(
+        2* 1000,
+      );
       await flushPromises();
       expect(xapi.Command.UserInterface.WebView.Clear).toHaveBeenCalledWith({
         Target: "OSD",
@@ -432,19 +479,101 @@ supportedDevices.forEach((productPlatform) => {
         xapi.Status.RoomAnalytics.PeopleCount.Current.set(emptyCount);
         await flushPromises();
 
+        const autoCloseSeconds = testConfig.timers.emptyRoomAutoCloseSeconds * 1000;
         // Not yet closed just before the 10s empty-room timeout.
-        jest.advanceTimersByTime(9 * 1000);
+        jest.advanceTimersByTime(autoCloseSeconds - 1000);
         await flushPromises();
-        expect(
-          xapi.Command.UserInterface.WebView.Clear,
-        ).not.toHaveBeenCalled();
+        expect(xapi.Command.UserInterface.WebView.Clear).not.toHaveBeenCalled();
 
         // Closes after 10s, well before the 60s inactivity timeout.
-        jest.advanceTimersByTime(1 * 1000);
+        jest.advanceTimersByTime(autoCloseSeconds + 1000);
         await flushPromises();
         expect(xapi.Command.UserInterface.WebView.Clear).toHaveBeenCalledWith({
           Target: "OSD",
         });
+      });
+    });
+
+    it("closes webview if it is still open before initializing", async () => {
+      const { default: xapi } = await import("xapi");
+      xapi.reset();
+      await loadMacro(xapi, productPlatform, testConfig.webAppUrl);
+      await flushPromises();
+      expect(xapi.Command.UserInterface.WebView.Clear).toHaveBeenCalled();
+    });
+
+    it("Does not close webview if it is not still open before initializing", async () => {
+      const { default: xapi } = await import("xapi");
+      xapi.reset();
+      await loadMacro(xapi, productPlatform);
+      await flushPromises();
+      expect(xapi.Command.UserInterface.WebView.Clear).not.toHaveBeenCalled();
+    });
+
+    it("Displays alert if there was an error sending feedback to the backend", async () => {
+      const { default: xapi } = await import("xapi");
+      xapi.reset();
+      await loadMacro(xapi, productPlatform);
+      xapi.clearCallHistory();
+
+      xapi.Command.HttpClient.Post.mockRejectedValue(new Error("Error"));
+
+      await displaySurveyViaCall(xapi);
+
+      // The survey webview is now open on the OSD.
+      await openDisplayedSurvey(xapi);
+
+      const response = await getResponseFromWebView(xapi);
+
+      expect(response).toBeDefined();
+
+      expect(
+        xapi.Command.UserInterface.Message.Alert.Display,
+      ).toHaveBeenCalled();
+      expect(
+        xapi.Command.UserInterface.Message.Alert.Display,
+      ).toHaveBeenCalledWith({
+        Title: "BYOD Feedback",
+        Text: "Unable to send feedback. Please try again later.",
+        Duration: 10,
+      });
+    });
+
+    it("Displays alert if successfully sent feedback to the backend", async () => {
+      const { default: xapi } = await import("xapi");
+      xapi.reset();
+      await loadMacro(xapi, productPlatform);
+      xapi.clearCallHistory();
+
+      xapi.setHttpClientResponse("Post", {
+        statusCode: 200,
+        body: "success",
+        headers: { "content-type": "text/plain" },
+      });
+
+      await displaySurveyViaCall(xapi);
+
+      // The survey webview is now open on the OSD.
+      await openDisplayedSurvey(xapi);
+
+      const webviewUrlbase = await getWebViewBaseUrl(xapi);
+      await updateWebViewUrl(xapi, webviewUrlbase);
+      await flushPromises();
+
+      expect(xapi.Command.HttpClient.Post).toHaveBeenCalled();
+
+      jest.advanceTimersByTime(1000);
+      await flushPromises();
+
+      expect(
+        xapi.Command.UserInterface.Message.Alert.Display,
+      ).toHaveBeenCalled();
+      expect(
+        xapi.Command.UserInterface.Message.Alert.Display,
+      ).toHaveBeenCalledWith({
+        Title: "BYOD Feedback",
+        Text: "Feedback sent successfully",
+        Duration: 10,
       });
     });
   });
