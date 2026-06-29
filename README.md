@@ -114,7 +114,7 @@ https://wxsd-sales.github.io/byod-feedback-webapp/webapp
 >
 >   Required for sending the collected feedback to your backend
 >
-> - [xCommand WebEngine MediaAccess Add](https://roomos.cisco.com/xapi/Command.WebEngine.MediaAccess.Add/)
+> - [xCommand WebEngine MediaAccess Add Device: Camera Hostname: "wxsd-sales.github.io"](https://roomos.cisco.com/xapi/Command.WebEngine.MediaAccess.Add/)
 >
 >   Gives the web app domain access to the device's web cam
 
