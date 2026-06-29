@@ -24,8 +24,8 @@ const FEEDBACK_BY_GESTURE = {
 };
 
 const promptPanel = document.querySelector(".prompt-panel");
-const messagePrompt = document.querySelector("#messagePrompt");
-const cameraStage = document.querySelector("#cameraStage"); 
+const messagePrompt = document.getElementById("messagePrompt");
+const cameraStage = document.querySelector("#cameraStage");
 const feedbackChoices = document.querySelector("#feedbackChoices");
 const video = document.querySelector("#webcam");
 const mockPerson = document.querySelector("#mockPerson");
@@ -50,11 +50,10 @@ let submitted = false;
 void initialize();
 
 async function initialize() {
-
-  if(hashes?.messagePrompt) {
-    messagePrompt.textContent = hashes.messagePrompt;
+  if (hashes?.messagePrompt && messagePrompt) {
+    console.warn("Setting Message Prompt:", hashes.messagePrompt);
+    messagePrompt.innerText = hashes.messagePrompt;
   }
-
 
   if (renderHashView(hashes?.view)) {
     return;

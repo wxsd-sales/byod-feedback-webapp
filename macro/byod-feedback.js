@@ -276,8 +276,8 @@ async function processNumOfCalls(numOfCalls) {
   monitor.endEvent("webexShare");
 }
 
-async function displaySurvey(session) {
-  const hash = await generateHash(session);
+async function displaySurvey() {
+  const hash = await generateHash();
   const Url = workingConfig.webAppUrl + "#" + hash;
   debug("Displaying Survey - Url:", Url);
   log("Displaying Survey");
