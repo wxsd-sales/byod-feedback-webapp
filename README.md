@@ -148,9 +148,8 @@ const config = {
 The web app is static HTML, CSS, and JavaScript, so it can be hosted from any HTTPS-capable web server.
 
 1. Copy the `webapp` directory to your hosting environment.
-2. Update `WEB_APP_FEEDBACK_URL` in `webapp/app.js` if your self-hosted app should always send feedback to one backend, or continue using the macro `feedbackUrl` setting if you want the macro to provide the backend URL.
-3. Update `config.webAppUrl` in `macro/byod-feedback.js` to point to your hosted copy.
-4. Ensure the RoomOS device can reach your web app URL and that the macro can add camera media access for that host.
+2. Update `config.webAppUrl` in `macro/byod-feedback.js` to point to your hosted copy.
+3. Ensure the RoomOS device can reach your web app URL and that the macro can add camera media access for that host.
 
 ## Demo
 
