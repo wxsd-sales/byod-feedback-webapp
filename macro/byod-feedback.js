@@ -22,20 +22,34 @@ import xapi from "xapi";
  * Configuration Start
  **********************************************************/
 
+// CONFIG:start
 const config = {
   messagePrompt: "Were you satisfied with this Meeting Room Experience?",
   webAppUrl: "https://wxsd-sales.github.io/byod-feedback-webapp/webapp",
   feedback: {
+    // "custom" posts to feedback.url. "webex" posts a message via the Webex
+    // messages API instead, using feedback.webex below.
+    destination: "custom",
     url: "https://your-backend.example.com/feedback",
     apiKey: "your-api-key",
+    webex: {
+      botAccessToken: "your-bot-access-token",
+      // "room" sends to feedback.webex.roomId, "person" sends a 1:1 message
+      // to feedback.webex.toPersonEmail.
+      target: "room",
+      roomId: "",
+      toPersonEmail: "",
+    },
   },
   timers: {
     autoCloseSeconds: 60,
     emptyRoomAutoCloseSeconds: 10,
     meetingDurationSeconds: 180,
+    gestureHoldSeconds: 5,
   },
   debug: true,
 };
+// CONFIG:end
 
 /*********************************************************
  * Configuration End
@@ -318,6 +332,7 @@ function extractFQDN(url) {
 async function generateHash() {
   const result = {
     messagePrompt: workingConfig.messagePrompt,
+    gestureHoldSeconds: workingConfig.timers.gestureHoldSeconds,
   };
   return btoa(JSON.stringify(result));
 }
@@ -337,6 +352,17 @@ async function sendFeedback(feedback) {
   const lastSession = monitor.getLastSession();
   warn("Last Session:", lastSession);
 
+  const destination = workingConfig.feedback.destination ?? "custom";
+
+  if (destination === "webex") {
+    await sendFeedbackToWebex({ device, lastSession, feedback });
+    return;
+  }
+
+  await sendFeedbackToCustomBackend({ device, lastSession, feedback });
+}
+
+async function sendFeedbackToCustomBackend({ device, lastSession, feedback }) {
   const Timeout = 10;
   const Url = workingConfig.feedback.url;
   const body = JSON.stringify({ device, lastSession, feedback });
@@ -353,16 +379,86 @@ async function sendFeedback(feedback) {
   debug("Timeout:", Timeout);
 
   try {
-    const response = await xapi.Command.HttpClient.Post(
-      { Header, ResultBody, Timeout, Url },
-      body,
-    );
+    await xapi.Command.HttpClient.Post({ Header, ResultBody, Timeout, Url }, body);
     debug("Feedback sent successfully");
     alert("Feedback sent successfully", 10);
   } catch (error) {
     warn("Unable to send feedback.", error);
     alert("Unable to send feedback. Please try again later.", 10);
   }
+}
+
+async function sendFeedbackToWebex({ device, lastSession, feedback }) {
+  const { botAccessToken, target, roomId, toPersonEmail } =
+    workingConfig.feedback.webex;
+
+  const Timeout = 10;
+  const Url = "https://webexapis.com/v1/messages";
+  const markdown = buildFeedbackMarkdown({ device, lastSession, feedback });
+  const body = JSON.stringify({
+    ...(target === "person" ? { toPersonEmail } : { roomId }),
+    markdown,
+  });
+  const Header = [
+    "Content-Type: application/json",
+    "Authorization: Bearer " + botAccessToken,
+  ];
+  const ResultBody = "PlainText";
+
+  debug("Sending feedback to Webex:", Url);
+  debug("Body:", body);
+  debug("Header:", Header);
+  debug("ResultBody:", ResultBody);
+  debug("Timeout:", Timeout);
+
+  try {
+    await xapi.Command.HttpClient.Post({ Header, ResultBody, Timeout, Url }, body);
+    debug("Feedback sent successfully");
+    alert("Feedback sent successfully", 10);
+  } catch (error) {
+    warn("Unable to send feedback.", error);
+    alert("Unable to send feedback. Please try again later.", 10);
+  }
+}
+
+// Builds a Webex-markdown message summarising the collected feedback. Keeps
+// to the subset of markdown Webex actually renders (bold, bullet lists, "---"
+// dividers) - no tables or headers.
+function buildFeedbackMarkdown({ device, lastSession, feedback }) {
+  const isSatisfied = feedback?.feedback === "satisfied";
+  const emoji = isSatisfied ? "👍" : "👎";
+  const label = feedback?.label || (isSatisfied ? "Satisfied" : "Not satisfied");
+  const confidence =
+    typeof feedback?.confidence === "number"
+      ? `${Math.round(feedback.confidence * 100)}%`
+      : "—";
+  const sessionType = lastSession?.type
+    ? lastSession.type.charAt(0).toUpperCase() + lastSession.type.slice(1)
+    : "Unknown";
+  const duration = formatDuration(lastSession?.durationSeconds);
+  const collectedAt = feedback?.collectedAt
+    ? new Date(feedback.collectedAt).toLocaleString()
+    : new Date().toLocaleString();
+
+  return [
+    `**${emoji} Meeting Room Feedback — ${label}**`,
+    "",
+    `- **Room:** ${device?.workspaceName || "Unknown"}`,
+    `- **Session:** ${sessionType}${duration ? ` — ${duration}` : ""}`,
+    `- **Confidence:** ${confidence}`,
+    `- **Collected:** ${collectedAt}`,
+    "",
+    "---",
+    `Device ID: ${device?.deviceId || "—"}`,
+  ].join("\n");
+}
+
+function formatDuration(seconds) {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds)) return "";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  if (mins <= 0) return `${secs}s`;
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
 
 

@@ -1,7 +1,10 @@
 const hashes = getHashes();
 // Set this to your feedback endpoint to enable HTTP POST submission.
 const WEB_APP_FEEDBACK_URL = "";
-const HOLD_DURATION_MS = 5000;
+const DEFAULT_HOLD_SECONDS = 5;
+const MIN_HOLD_SECONDS = 1;
+const MAX_HOLD_SECONDS = 30;
+const HOLD_DURATION_MS = resolveHoldSeconds(hashes?.gestureHoldSeconds) * 1000;
 const HOLD_LOST_GRACE_MS = 450;
 const WASM_ROOT =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
@@ -326,6 +329,16 @@ function getBestGesture(gestureLists) {
       Object.prototype.hasOwnProperty.call(FEEDBACK_BY_GESTURE, categoryName),
     )
     .sort((first, second) => second.score - first.score)[0];
+}
+
+// Resolves the "gestureHoldSeconds" hash param to a whole number of seconds
+// between 1 and 30. Falls back to DEFAULT_HOLD_SECONDS when the value is
+// absent or isn't a usable number.
+function resolveHoldSeconds(value) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds)) return DEFAULT_HOLD_SECONDS;
+  const rounded = Math.round(seconds);
+  return Math.min(Math.max(rounded, MIN_HOLD_SECONDS), MAX_HOLD_SECONDS);
 }
 
 function getHashes() {

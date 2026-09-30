@@ -6,9 +6,12 @@ import { fileURLToPath } from "node:url";
 
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "127.0.0.1";
+// Serves the whole repo, not just webapp/, so the wizard (wizard/) can also
+// be previewed, and so it can fetch macro/byod-feedback.js the same way it
+// does when both are published together on GitHub Pages.
 const webRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../webapp",
+  "..",
 );
 
 const contentTypes = {
@@ -23,7 +26,7 @@ const contentTypes = {
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
-    const pathname = url.pathname == "/" ? "/index.html" : url.pathname;
+    const pathname = url.pathname == "/" ? "/webapp/index.html" : url.pathname;
     const filePath = path.resolve(webRoot, `.${decodeURIComponent(pathname)}`);
 
     if (filePath != webRoot && !filePath.startsWith(`${webRoot}${path.sep}`)) {
@@ -56,7 +59,8 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Web web app demo: http://${host}:${port}/webapp/index.html`);
+  console.log(`Web app demo: http://${host}:${port}/webapp/index.html`);
+  console.log(`Wizard demo: http://${host}:${port}/wizard/index.html`);
 });
 
 function send(response, statusCode, text) {

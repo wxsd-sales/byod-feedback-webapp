@@ -1,12 +1,16 @@
-name: Webapp Screenshots
+name: Demo Screenshots
 
 on:
   push:
     paths:
       - "webapp/**"
+      - "wizard/**"
+      - "scripts/**"
   pull_request:
     paths:
       - "webapp/**"
+      - "wizard/**"
+      - "scripts/**"
 
 jobs:
   screenshots:
@@ -27,5 +31,5 @@ jobs:
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         with:
-          name: webapp-screenshots
+          name: demo-screenshots
           path: screenshots/

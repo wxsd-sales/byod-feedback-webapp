@@ -11,22 +11,39 @@ const verbose = ["1", "true", "yes"].includes(
   String(process.env.SCREENSHOT_VERBOSE || "").toLowerCase(),
 );
 const size = "1076,655";
+const wizardSize = "1280,900";
 
 const shots = [
   {
     name: "screenshot-startup.png",
     size,
-    hash: { view: "startup" },
+    url: getShotUrl({ path: "/webapp/index.html", hash: { view: "startup" } }),
   },
   {
     name: "screenshot-countdown.png",
     size,
-    hash: { view: "countdown" },
+    url: getShotUrl({
+      path: "/webapp/index.html",
+      hash: { view: "countdown" },
+    }),
   },
   {
     name: "screenshot-success.png",
     size,
-    hash: { view: "success" },
+    url: getShotUrl({ path: "/webapp/index.html", hash: { view: "success" } }),
+  },
+  // The wizard forces its Momentum theme from a "#theme=light|dark" hash
+  // (see wizard/index.html), so these render a specific theme regardless of
+  // the screenshotting machine's OS preference.
+  {
+    name: "screenshot-wizard-light.png",
+    size: wizardSize,
+    url: getShotUrl({ path: "/wizard/index.html", rawHash: "theme=light" }),
+  },
+  {
+    name: "screenshot-wizard-dark.png",
+    size: wizardSize,
+    url: getShotUrl({ path: "/wizard/index.html", rawHash: "theme=dark" }),
   },
 ];
 
@@ -47,7 +64,7 @@ try {
     await captureScreenshot({
       filePath: path.join(outputDir, shot.name),
       size: shot.size,
-      url: getShotUrl(shot.hash),
+      url: shot.url,
     });
   }
 
@@ -137,10 +154,17 @@ async function isUrlReady(url) {
   }
 }
 
-function getShotUrl(hash) {
-  if (!hash) return baseUrl;
-  const encodedHash = Buffer.from(JSON.stringify(hash), "utf8").toString("base64");
-  return `${baseUrl}#${encodedHash}`;
+// `hash` is base64-JSON-encoded, matching how webapp/app.js reads its own
+// hash params. `rawHash` is appended as-is, for pages (like the wizard) that
+// read plain "#key=value" hash params instead.
+function getShotUrl({ path: shotPath = "", hash, rawHash } = {}) {
+  const url = `${baseUrl}${shotPath}`;
+  if (rawHash) return `${url}#${rawHash}`;
+  if (!hash) return url;
+  const encodedHash = Buffer.from(JSON.stringify(hash), "utf8").toString(
+    "base64",
+  );
+  return `${url}#${encodedHash}`;
 }
 
 function captureScreenshot({ filePath, size, url }) {

@@ -53,7 +53,7 @@ Upon opening, the web app accesses the Cisco Device's web camera and processes t
 
 #### Hold Gesture Countdown:
 
-When the user is detected as gesturing a thumbs up or thumbs down, a countdown is shown for a set time until the gesture is accepted.
+When the user is detected as gesturing a thumbs up or thumbs down, a countdown is shown for a set time until the gesture is accepted. This hold time is controlled by `config.timers.gestureHoldSeconds` in the macro, which is passed to the web app as a `gestureHoldSeconds` URL hash parameter. The web app accepts any whole number of seconds from 1 to 30; values outside that range are clamped, and anything else unparsable falls back to 5 seconds.
 
 ![webapp countdown](screenshots/screenshot-countdown.png)
 
@@ -66,6 +66,22 @@ Once the feedback is captured, the web app then shows a success screen. In the b
 The live hosted web app is available here:
 
 https://wxsd-sales.github.io/byod-feedback-webapp/webapp
+
+### Configuration Wizard:
+
+The [wizard](wizard/index.html) is a form-based alternative to hand-editing the macro: it's pre-filled with the macro's own default values, validates your input, can resolve a Webex space or person for you (see [Feedback Destinations](#feedback-destinations) below), and lets you download a ready-to-paste copy of the macro from your browser.
+
+<a href="https://wxsd-sales.github.io/byod-feedback-webapp/wizard/">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="screenshots/screenshot-wizard-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="screenshots/screenshot-wizard-light.png">
+    <img alt="BYOD Feedback macro Configuration Wizard" src="screenshots/screenshot-wizard-light.png">
+  </picture>
+</a>
+
+The live hosted wizard is available here:
+
+https://wxsd-sales.github.io/byod-feedback-webapp/wizard/
 
 ## Setup
 
@@ -88,19 +104,29 @@ https://wxsd-sales.github.io/byod-feedback-webapp/webapp
      messagePrompt: "Were you satisfied with this Meeting Room Experience?",
      webAppUrl: "https://wxsd-sales.github.io/byod-feedback-webapp/webapp",
      feedback: {
+       destination: "custom",
        url: "https://your-backend.example.com/feedback",
        apiKey: "your-api-key",
+       webex: {
+         botAccessToken: "your-bot-access-token",
+         target: "room",
+         roomId: "",
+         toPersonEmail: "",
+       },
      },
      timers: {
        autoCloseSeconds: 60,
        emptyRoomAutoCloseSeconds: 10,
        meetingDurationSeconds: 180,
+       gestureHoldSeconds: 5,
      },
      debug: true,
    };
    ```
 
 5. Save and enable the macro.
+
+   Alternatively, use the [Configuration Wizard](wizard/index.html) to fill out these values in a form (pre-filled with the macro's own defaults, with invalid inputs blocked) and download a ready-to-paste copy of the macro.
 
 > [!WARNING]
 >
@@ -118,11 +144,16 @@ https://wxsd-sales.github.io/byod-feedback-webapp/webapp
 >
 >   Gives the web app domain access to the device's web cam
 
-## Feedback Backend
+## Feedback Destinations
 
 This macro leverages the xAPI HTTP Client xCommand to POST the collected feedback. This is as opposed to sending the collected feedback from the web app directly and potentially hitting CORS (Cross-Origin Resource Sharing) related blockers.
 
-Review the macro config and configure your backend URL and any API Key you may have by configuring `feedback.url` and `feedback.apiKey` in the macro config.
+`feedback.destination` chooses where feedback goes:
+
+- `"custom"` (default) - POSTs the device, session, and feedback details as JSON to `feedback.url`, authenticated with `feedback.apiKey` as a bearer token.
+- `"webex"` - posts a formatted markdown summary to a Webex space or as a 1:1 message via the [Webex messages API](https://developer.webex.com/docs/api/v1/messages/create-a-message), using the bot access token and target configured under `feedback.webex`:
+  - `botAccessToken` - an access token for a [Webex bot](https://developer.webex.com/docs/bots).
+  - `target` - `"room"` to post to a space (`feedback.webex.roomId`), or `"person"` to send a direct message (`feedback.webex.toPersonEmail`).
 
 Macro configuration example:
 
@@ -131,17 +162,27 @@ const config = {
   messagePrompt: "Were you satisfied with this Meeting Room Experience?",
   webAppUrl: "https://wxsd-sales.github.io/byod-feedback-webapp/webapp",
   feedback: {
+    destination: "custom",
     url: "https://your-backend.example.com/feedback",
     apiKey: "your-api-key",
+    webex: {
+      botAccessToken: "your-bot-access-token",
+      target: "room",
+      roomId: "",
+      toPersonEmail: "",
+    },
   },
   timers: {
     autoCloseSeconds: 60,
     emptyRoomAutoCloseSeconds: 10,
     meetingDurationSeconds: 180,
+    gestureHoldSeconds: 5,
   },
   debug: true,
 };
 ```
+
+The [Configuration Wizard](wizard/index.html) can look up a space or person for you: paste in a bot access token and it searches Webex's List Rooms / List People APIs from your browser to resolve the `roomId` or `toPersonEmail` for you, alongside a preview of what the resulting message looks like.
 
 ## Hosting Your Own Copy
 

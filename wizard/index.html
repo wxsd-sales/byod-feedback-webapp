@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Apply the Momentum Webex theme before first paint to avoid a flash.
+      // A "#theme=light|dark" hash forces a theme (used by on-device WebViews);
+      // otherwise the OS colour-scheme preference is followed.
+      (function initMomentumTheme() {
+        const getHashTheme = () => {
+          const raw = window.location.hash.startsWith("#")
+            ? window.location.hash.slice(1)
+            : window.location.hash;
+          if (!raw) return null;
+          const theme = new URLSearchParams(raw).get("theme");
+          return theme === "light" || theme === "dark" ? theme : null;
+        };
+
+        const apply = () => {
+          const forcedTheme = getHashTheme();
+          const dark = forcedTheme
+            ? forcedTheme === "dark"
+            : window.matchMedia("(prefers-color-scheme: dark)").matches;
+          const root = document.documentElement;
+          root.classList.remove(
+            "mds-theme-stable-lightWebex",
+            "mds-theme-stable-darkWebex",
+          );
+          root.classList.add(
+            dark ? "mds-theme-stable-darkWebex" : "mds-theme-stable-lightWebex",
+          );
+          root.style.colorScheme = dark ? "dark" : "light";
+        };
+
+        apply();
+        window.addEventListener("hashchange", apply);
+        window
+          .matchMedia("(prefers-color-scheme: dark)")
+          .addEventListener("change", () => {
+            if (!getHashTheme()) apply();
+          });
+      })();
+    </script>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@momentum-design/icons@0.54.0/dist/data/MomentumFontIcons.css"
+      integrity="sha384-cRTwUMmzKBtfI4txd/iehWhZp7TowC6EHDTTfeR4fA88pF5oezPFRmSCub32x7JR"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@momentum-design/tokens@0.10.4/dist/css/theme/webex/light-stable.css"
+      integrity="sha384-aHuoM9vQGc4bIdjh/+QTsoAEtH5+fnRhLomr3VcTcFxTrheFiGnt26SoPv05oTWI"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@momentum-design/tokens@0.10.4/dist/css/theme/webex/dark-stable.css"
+      integrity="sha384-xo4f17YKVYq4xv2I3xxGoS+l3GhukPTuhpQTP7FT+M0nq9gCMQkzpohl5DJo6Zom"
+      crossorigin="anonymous"
+    />
+    <title>BYOD Feedback WebApp</title>
+    <script src="app-config.js"></script>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="app-header__brand">
+        <span class="app-header__product" id="app-product"
+          >Configuration Wizard</span
+        >
+      </div>
+      <div class="app-header__actions">
+        <a
+          class="source-link"
+          id="source-link"
+          href="https://github.com/wxsd-sales"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="View source code on GitHub"
+          title="View source code on GitHub"
+        >
+          <span class="source-link__icon" aria-hidden="true"></span>
+        </a>
+        <div class="theme-select" id="theme-select" data-open="false">
+          <button
+            id="theme-select-button"
+            class="secondary-button theme-select-button"
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+          >
+            <span
+              id="theme-select-current-icon"
+              class="icon icon-laptop-regular theme-select-current-icon"
+              aria-hidden="true"
+            ></span>
+            <span id="theme-select-label">System</span>
+            <span
+              class="icon icon-arrow-triangle-down-filled theme-select-caret"
+              aria-hidden="true"
+            ></span>
+          </button>
+          <div
+            id="theme-select-menu"
+            class="theme-select-menu"
+            role="listbox"
+            aria-label="Theme"
+            hidden
+          >
+            <button
+              class="theme-select-option"
+              type="button"
+              role="option"
+              data-theme-choice="system"
+              aria-selected="true"
+            >
+              <span class="icon icon-laptop-regular" aria-hidden="true"></span>
+              <span>System</span>
+            </button>
+            <button
+              class="theme-select-option"
+              type="button"
+              role="option"
+              data-theme-choice="light"
+              aria-selected="false"
+            >
+              <span
+                class="icon icon-brightness-high-filled"
+                aria-hidden="true"
+              ></span>
+              <span>Light</span>
+            </button>
+            <button
+              class="theme-select-option"
+              type="button"
+              role="option"
+              data-theme-choice="dark"
+              aria-selected="false"
+            >
+              <span
+                class="icon icon-quiet-hours-presence-filled"
+                aria-hidden="true"
+              ></span>
+              <span>Dark</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <div class="app-content">
+        <div class="tab-bar" role="tablist" aria-label="Configuration steps">
+          <button
+            class="tab"
+            id="tab-general"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="general"
+            data-tab-target="general"
+          >
+            <span
+              class="icon icon-adjust-horizontal-regular"
+              aria-hidden="true"
+            ></span>
+            <span class="tab__label">General</span>
+          </button>
+          <button
+            class="tab"
+            id="tab-export"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="export"
+            tabindex="-1"
+            data-tab-target="export"
+          >
+            <span class="icon icon-save-regular" aria-hidden="true"></span>
+            <span class="tab__label">Export</span>
+          </button>
+        </div>
+
+        <div class="page-stack" aria-live="polite">
+          <!-- General -->
+          <section
+            class="webapp-function"
+            id="general"
+            role="tabpanel"
+            aria-labelledby="tab-general"
+            tabindex="0"
+          >
+            <h2>Macro Settings</h2>
+            <p>
+              Configure the <code>byod-feedback</code> macro below, then open
+              the <strong>Export</strong> tab to copy the generated
+              <code>CONFIG</code> block or download a ready-to-paste copy of
+              <code>macro/byod-feedback.js</code>.
+            </p>
+
+            <form class="config-form" id="wizard-form" autocomplete="off">
+              <div class="field">
+                <label class="field__label" for="message-prompt"
+                  >Survey prompt</label
+                >
+                <textarea
+                  class="field__input"
+                  id="message-prompt"
+                  name="message-prompt"
+                  rows="2"
+                  maxlength="200"
+                  required
+                  placeholder="Were you satisfied with this Meeting Room Experience?"
+                ></textarea>
+                <span class="field__hint"
+                  >Shown above the gesture camera on the web app.</span
+                >
+                <p
+                  class="field-status"
+                  id="message-prompt-status"
+                  role="status"
+                  aria-live="polite"
+                ></p>
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="webapp-url">Web app URL</label>
+                <input
+                  class="field__input"
+                  type="url"
+                  id="webapp-url"
+                  name="webapp-url"
+                  pattern="https?://.+"
+                  required
+                  placeholder="https://org.github.io/repo/webapp"
+                />
+                <span class="field__hint"
+                  >The page the macro opens in an on-device WebView.</span
+                >
+                <p
+                  class="field-status"
+                  id="webapp-url-status"
+                  role="status"
+                  aria-live="polite"
+                ></p>
+              </div>
+
+              <div class="config-divider"></div>
+
+              <div class="field">
+                <label class="field__label" for="feedback-destination"
+                  >Feedback destination</label
+                >
+                <div class="select-wrap">
+                  <select
+                    class="field__input field__select"
+                    id="feedback-destination"
+                    name="feedback-destination"
+                  >
+                    <option value="custom">Custom backend</option>
+                    <option value="webex">Webex notification</option>
+                  </select>
+                </div>
+                <span class="field__hint"
+                  >Where the macro sends collected feedback.</span
+                >
+              </div>
+
+              <!-- Custom backend -->
+              <div id="custom-backend-panel" class="destination-panel">
+                <div class="field">
+                  <label class="field__label" for="feedback-url"
+                    >Feedback backend URL</label
+                  >
+                  <input
+                    class="field__input"
+                    type="url"
+                    id="feedback-url"
+                    name="feedback-url"
+                    pattern="https?://.+"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    placeholder="https://your-backend.example.com/feedback"
+                  />
+                  <span class="field__hint"
+                    >Where the macro POSTs collected feedback via the xAPI
+                    HTTP Client.</span
+                  >
+                  <p
+                    class="field-status"
+                    id="feedback-url-status"
+                    role="status"
+                    aria-live="polite"
+                  ></p>
+                </div>
+
+                <div class="field">
+                  <label class="field__label" for="feedback-api-key"
+                    >Feedback backend API key</label
+                  >
+                  <input
+                    class="field__input"
+                    type="text"
+                    id="feedback-api-key"
+                    name="feedback-api-key"
+                    maxlength="200"
+                    autocapitalize="off"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="your-api-key"
+                  />
+                  <span class="field__hint"
+                    >Sent as a <code>Bearer</code> token. Leave blank if your
+                    backend doesn't require one.</span
+                  >
+                </div>
+
+                <div class="field">
+                  <span class="field__label">Expected payload preview</span>
+                  <pre
+                    class="code-output__command code-output__command--preview"
+                  ><code id="custom-payload-preview"></code></pre>
+                  <span class="field__hint"
+                    >What the macro POSTs after collecting feedback. Device
+                    and session details shown are a sample.</span
+                  >
+                </div>
+              </div>
+
+              <!-- Webex notification -->
+              <div id="webex-panel" class="destination-panel" hidden>
+                <div class="field">
+                  <label class="field__label" for="webex-target">Send to</label>
+                  <div class="select-wrap">
+                    <select
+                      class="field__input field__select"
+                      id="webex-target"
+                      name="webex-target"
+                    >
+                      <option value="room">A Webex space (room)</option>
+                      <option value="person">A person (1:1 message)</option>
+                    </select>
+                  </div>
+                  <span class="field__hint"
+                    >Whether feedback is posted to a group space or sent as a
+                    direct message.</span
+                  >
+                </div>
+
+                <div class="field">
+                  <label class="field__label" for="webex-bot-token"
+                    >Webex bot access token</label
+                  >
+                  <div class="token-field">
+                    <input
+                      class="field__input"
+                      type="password"
+                      id="webex-bot-token"
+                      name="webex-bot-token"
+                      autocapitalize="off"
+                      autocomplete="off"
+                      spellcheck="false"
+                      placeholder="your-bot-access-token"
+                    />
+                    <button
+                      type="button"
+                      class="icon-button secondary-button token-field__toggle"
+                      id="webex-bot-token-toggle"
+                      aria-label="Show access token"
+                      aria-pressed="false"
+                    >
+                      <span class="icon icon-show-regular" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                  <span class="field__hint"
+                    >Used in this browser only, to search Webex and saved
+                    into the macro config. It's never sent anywhere but the
+                    Webex API.</span
+                  >
+                  <p
+                    class="field-status"
+                    id="webex-bot-token-status"
+                    role="status"
+                    aria-live="polite"
+                  ></p>
+                </div>
+
+                <div class="field" id="webex-room-search-field">
+                  <label class="field__label" for="webex-room-search"
+                    >Find a space</label
+                  >
+                  <input
+                    class="field__input"
+                    type="text"
+                    id="webex-room-search"
+                    name="webex-room-search"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="Start typing a space name…"
+                    disabled
+                  />
+                  <span class="field__hint" id="webex-room-search-hint"
+                    >Enter a bot access token above to search the spaces it's
+                    a member of.</span
+                  >
+                  <div
+                    class="search-results"
+                    id="webex-room-results"
+                    role="listbox"
+                    aria-label="Matching spaces"
+                    hidden
+                  ></div>
+                </div>
+
+                <div class="field" id="webex-person-search-field" hidden>
+                  <label class="field__label" for="webex-person-search"
+                    >Find a person</label
+                  >
+                  <input
+                    class="field__input"
+                    type="text"
+                    id="webex-person-search"
+                    name="webex-person-search"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="Name or email address…"
+                    disabled
+                  />
+                  <span class="field__hint" id="webex-person-search-hint"
+                    >Enter a bot access token above to search for a
+                    person.</span
+                  >
+                  <div
+                    class="search-results"
+                    id="webex-person-results"
+                    role="listbox"
+                    aria-label="Matching people"
+                    hidden
+                  ></div>
+                </div>
+
+                <div class="selected-target" id="webex-selected-target" hidden>
+                  <div class="selected-target__info">
+                    <span class="selected-target__label">Selected</span>
+                    <span
+                      class="selected-target__name"
+                      id="webex-selected-target-name"
+                    ></span>
+                  </div>
+                  <button
+                    type="button"
+                    class="secondary-button"
+                    id="webex-selected-target-clear"
+                  >
+                    Change
+                  </button>
+                </div>
+                <p
+                  class="field-status"
+                  id="webex-target-status"
+                  role="status"
+                  aria-live="polite"
+                ></p>
+
+                <div class="field">
+                  <span class="field__label">Message preview</span>
+                  <div class="webex-mock">
+                    <div class="webex-mock__avatar" aria-hidden="true">
+                      <span class="icon icon-bot-bold"></span>
+                    </div>
+                    <div class="webex-mock__body">
+                      <div class="webex-mock__meta">
+                        <span class="webex-mock__sender">BYOD Feedback Bot</span>
+                        <span class="webex-mock__time">Just now</span>
+                      </div>
+                      <div
+                        class="webex-mock__bubble"
+                        id="webex-message-preview"
+                      ></div>
+                    </div>
+                  </div>
+                  <span class="field__hint" id="webex-message-preview-caption"
+                    >Sample feedback shown - the macro fills this in with the
+                    real session and feedback details.</span
+                  >
+                </div>
+              </div>
+
+              <div class="config-divider"></div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label class="field__label" for="auto-close-seconds"
+                    >Inactivity timeout (seconds)</label
+                  >
+                  <input
+                    class="field__input"
+                    type="number"
+                    id="auto-close-seconds"
+                    name="auto-close-seconds"
+                    min="0"
+                    step="1"
+                    inputmode="numeric"
+                    required
+                    placeholder="60"
+                  />
+                  <span class="field__hint"
+                    >Closes the survey after no gesture is detected for this
+                    long.</span
+                  >
+                  <p
+                    class="field-status"
+                    id="auto-close-seconds-status"
+                    role="status"
+                    aria-live="polite"
+                  ></p>
+                </div>
+                <div class="field">
+                  <label class="field__label" for="empty-room-auto-close-seconds"
+                    >Empty room timeout (seconds)</label
+                  >
+                  <input
+                    class="field__input"
+                    type="number"
+                    id="empty-room-auto-close-seconds"
+                    name="empty-room-auto-close-seconds"
+                    min="0"
+                    step="1"
+                    inputmode="numeric"
+                    required
+                    placeholder="10"
+                  />
+                  <span class="field__hint"
+                    >Closes the survey faster once the room's people count
+                    reaches zero.</span
+                  >
+                  <p
+                    class="field-status"
+                    id="empty-room-auto-close-seconds-status"
+                    role="status"
+                    aria-live="polite"
+                  ></p>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label class="field__label" for="meeting-duration-seconds"
+                    >Minimum session duration (seconds)</label
+                  >
+                  <input
+                    class="field__input"
+                    type="number"
+                    id="meeting-duration-seconds"
+                    name="meeting-duration-seconds"
+                    min="0"
+                    step="1"
+                    inputmode="numeric"
+                    required
+                    placeholder="180"
+                  />
+                  <span class="field__hint"
+                    >Sessions shorter than this won't trigger a survey.</span
+                  >
+                  <p
+                    class="field-status"
+                    id="meeting-duration-seconds-status"
+                    role="status"
+                    aria-live="polite"
+                  ></p>
+                </div>
+                <div class="field">
+                  <label class="field__label" for="gesture-hold-seconds"
+                    >Gesture hold time (seconds)</label
+                  >
+                  <input
+                    class="field__input"
+                    type="number"
+                    id="gesture-hold-seconds"
+                    name="gesture-hold-seconds"
+                    min="1"
+                    max="30"
+                    step="1"
+                    inputmode="numeric"
+                    required
+                    placeholder="5"
+                  />
+                  <span class="field__hint"
+                    >How long a thumbs up/down must be held. 1-30 seconds.</span
+                  >
+                  <p
+                    class="field-status"
+                    id="gesture-hold-seconds-status"
+                    role="status"
+                    aria-live="polite"
+                  ></p>
+                </div>
+              </div>
+
+              <div class="config-divider"></div>
+
+              <div class="toggle-list">
+                <div class="toggle-row">
+                  <div class="toggle-row__text">
+                    <span class="toggle-row__label">Debug logging</span>
+                    <span class="toggle-row__hint"
+                      >Logs verbose macro activity to the device's macro
+                      console.</span
+                    >
+                  </div>
+                  <label class="switch">
+                    <input
+                      class="switch__input"
+                      type="checkbox"
+                      id="debug-enabled"
+                      name="debug-enabled"
+                    />
+                    <span class="switch__track"
+                      ><span class="switch__thumb"></span
+                    ></span>
+                  </label>
+                </div>
+              </div>
+            </form>
+          </section>
+
+          <!-- Export -->
+          <section
+            class="webapp-function"
+            id="export"
+            role="tabpanel"
+            aria-labelledby="tab-export"
+            tabindex="0"
+            hidden
+          >
+            <h2>Macro Config</h2>
+            <p>
+              Copy this block and paste it between the
+              <code>// CONFIG:start</code> and
+              <code>// CONFIG:end</code> markers in
+              <code>macro/byod-feedback.js</code>, or download a copy of the
+              macro with these values already applied.
+            </p>
+            <p
+              class="field-status"
+              id="macro-load-status"
+              role="status"
+              aria-live="polite"
+            ></p>
+
+            <div class="code-output">
+              <div class="code-output__header">
+                <span class="field__label">Generated config</span>
+                <div class="code-output__actions">
+                  <button
+                    id="download-button"
+                    type="button"
+                    class="icon-button icon-button--with-label secondary-button"
+                  >
+                    <span
+                      class="icon icon-download-bold"
+                      aria-hidden="true"
+                    ></span>
+                    <span class="icon-button__label">Download macro</span>
+                  </button>
+                  <button
+                    id="copy-button"
+                    type="button"
+                    class="icon-button icon-button--with-label secondary-button"
+                  >
+                    <span class="icon icon-copy-bold" aria-hidden="true"></span>
+                    <span class="icon-button__label">Copy config</span>
+                  </button>
+                </div>
+              </div>
+              <pre class="code-output__command"><code id="output"></code></pre>
+              <p
+                class="export-status"
+                id="export-status"
+                role="status"
+                aria-live="polite"
+              ></p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <script type="module" src="wizard.js"></script>
+  </body>
+</html>

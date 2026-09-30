@@ -9,8 +9,8 @@ import {
 
 const macroName = "./byod-feedback.js";
 
-const supportedDevices = ["Room Bar"];
-// const supportedDevices = ["Room Bar", "Room Bar Pro"];
+// const supportedDevices = ["Room Bar"];
+const supportedDevices = ["Room Bar", "Room Bar Pro"];
 
 const mockDeviceDetails = {
   workspaceName: "Meeting Room 1",
@@ -25,13 +25,21 @@ const testConfig = {
   messagePrompt: "Where you satisfied with this Meeting Room Experience?",
   webAppUrl: "https://wxsd-sales.github.io/byod-feedback-webapp/webapp",
   feedback: {
+    destination: "custom",
     url: "https://your-backend.example.com/feedback",
     apiKey: "your-api-key",
+    webex: {
+      botAccessToken: "your-bot-access-token",
+      target: "room",
+      roomId: "test-room-id",
+      toPersonEmail: "person@example.com",
+    },
   },
   timers: {
     autoCloseSeconds: 60,
     emptyRoomAutoCloseSeconds: 10,
     meetingDurationSeconds: 180,
+    gestureHoldSeconds: 5,
   },
   debug: true,
 };
@@ -212,6 +220,13 @@ function getDisplayedSurveyUrl(xapi) {
   return displayCalls.at(-1)?.[0]?.Url;
 }
 
+function getDisplayedSurveyHash(xapi) {
+  const url = getDisplayedSurveyUrl(xapi);
+  if (!url) return undefined;
+  const hashString = url.split("#").slice(1).join("#");
+  return JSON.parse(atob(hashString));
+}
+
 // Simulates the survey webview being open on the OSD by writing the displayed
 // survey URL into the WebView status so webviewOpen() reports it as open.
 async function openDisplayedSurvey(xapi) {
@@ -238,8 +253,9 @@ supportedDevices.forEach((productPlatform) => {
       jest.resetModules();
       jest.useFakeTimers();
       globalThis.__BYOD_FEEDBACK_TEST_CONFIG__ = structuredClone(testConfig);
-      // jest.spyOn(console, "log").mockImplementation(() => {});
-      // jest.spyOn(console, "warn").mockImplementation(() => {});
+      jest.spyOn(console, "log").mockImplementation(() => {});
+      jest.spyOn(console, "warn").mockImplementation(() => {});
+      jest.spyOn(console, "debug").mockImplementation(() => {});
     });
 
     afterEach(() => {
@@ -494,6 +510,21 @@ supportedDevices.forEach((productPlatform) => {
       });
     });
 
+    it("includes the configured gesture hold seconds in the survey URL hash", async () => {
+      const { default: xapi } = await import("xapi");
+      xapi.reset();
+      globalThis.__BYOD_FEEDBACK_TEST_CONFIG__.timers.gestureHoldSeconds = 12;
+      await loadMacro(xapi, productPlatform);
+      xapi.clearCallHistory();
+
+      await displaySurveyViaCall(xapi);
+
+      expect(xapi.Command.UserInterface.WebView.Display).toHaveBeenCalled();
+
+      const hash = getDisplayedSurveyHash(xapi);
+      expect(hash?.gestureHoldSeconds).toEqual(12);
+    });
+
     it("closes webview if it is still open before initializing", async () => {
       const { default: xapi } = await import("xapi");
       xapi.reset();
@@ -575,6 +606,59 @@ supportedDevices.forEach((productPlatform) => {
         Text: "Feedback sent successfully",
         Duration: 10,
       });
+    });
+
+    it("posts feedback to a Webex room when destination is webex and target is room", async () => {
+      const { default: xapi } = await import("xapi");
+      xapi.reset();
+      globalThis.__BYOD_FEEDBACK_TEST_CONFIG__.feedback.destination = "webex";
+      globalThis.__BYOD_FEEDBACK_TEST_CONFIG__.feedback.webex.target = "room";
+      await loadMacro(xapi, productPlatform);
+      xapi.clearCallHistory();
+
+      await displaySurveyViaCall(xapi);
+      await openDisplayedSurvey(xapi);
+
+      const webviewUrlbase = await getWebViewBaseUrl(xapi);
+      await updateWebViewUrl(xapi, webviewUrlbase);
+      await flushPromises();
+
+      expect(xapi.Command.HttpClient.Post).toHaveBeenCalled();
+      const [options, body] = xapi.Command.HttpClient.Post.mock.calls.at(-1);
+      const payload = JSON.parse(body);
+
+      expect(options.Url).toEqual("https://webexapis.com/v1/messages");
+      expect(options.Header).toContain(
+        "Authorization: Bearer your-bot-access-token",
+      );
+      expect(payload.roomId).toEqual("test-room-id");
+      expect(payload.toPersonEmail).toBeUndefined();
+      expect(payload.markdown).toContain("Satisfied");
+      expect(payload.markdown).toContain("Meeting Room 1");
+    });
+
+    it("posts feedback to a Webex person when destination is webex and target is person", async () => {
+      const { default: xapi } = await import("xapi");
+      xapi.reset();
+      globalThis.__BYOD_FEEDBACK_TEST_CONFIG__.feedback.destination = "webex";
+      globalThis.__BYOD_FEEDBACK_TEST_CONFIG__.feedback.webex.target = "person";
+      await loadMacro(xapi, productPlatform);
+      xapi.clearCallHistory();
+
+      await displaySurveyViaCall(xapi);
+      await openDisplayedSurvey(xapi);
+
+      const webviewUrlbase = await getWebViewBaseUrl(xapi);
+      await updateWebViewUrl(xapi, webviewUrlbase);
+      await flushPromises();
+
+      expect(xapi.Command.HttpClient.Post).toHaveBeenCalled();
+      const [, body] = xapi.Command.HttpClient.Post.mock.calls.at(-1);
+      const payload = JSON.parse(body);
+
+      expect(payload.toPersonEmail).toEqual("person@example.com");
+      expect(payload.roomId).toBeUndefined();
+      expect(payload.markdown).toContain("Satisfied");
     });
   });
 });
