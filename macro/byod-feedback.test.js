@@ -238,6 +238,21 @@ async function openDisplayedSurvey(xapi) {
   await flushPromises();
 }
 
+// Searches everything passed to a mocked console method (console.log/warn/
+// debug are mocked in beforeEach) for a substring, across all calls and
+// arguments - including inside logged arrays/objects such as the Header list.
+function consoleOutputIncludes(method, needle) {
+  return console[method].mock.calls.some((call) =>
+    call.some((arg) => {
+      try {
+        return JSON.stringify(arg)?.includes(needle);
+      } catch {
+        return String(arg).includes(needle);
+      }
+    }),
+  );
+}
+
 // Runs a qualifying call long enough to trigger the survey on hang up.
 async function displaySurveyViaCall(xapi) {
   startCallSession(xapi);
@@ -606,6 +621,122 @@ supportedDevices.forEach((productPlatform) => {
         Text: "Feedback sent successfully",
         Duration: 10,
       });
+    });
+
+    it("includes an Authorization header when the custom backend apiKey is set", async () => {
+      const { default: xapi } = await import("xapi");
+      xapi.reset();
+      await loadMacro(xapi, productPlatform);
+      xapi.clearCallHistory();
+
+      await displaySurveyViaCall(xapi);
+      await openDisplayedSurvey(xapi);
+
+      const webviewUrlbase = await getWebViewBaseUrl(xapi);
+      await updateWebViewUrl(xapi, webviewUrlbase);
+      await flushPromises();
+
+      expect(xapi.Command.HttpClient.Post).toHaveBeenCalled();
+      const [options] = xapi.Command.HttpClient.Post.mock.calls.at(-1);
+
+      expect(options.Header).toContain(
+        "Authorization: Bearer your-api-key",
+      );
+    });
+
+    it("omits the Authorization header when the custom backend apiKey is undefined", async () => {
+      const { default: xapi } = await import("xapi");
+      xapi.reset();
+      globalThis.__BYOD_FEEDBACK_TEST_CONFIG__.feedback.apiKey = undefined;
+      await loadMacro(xapi, productPlatform);
+      xapi.clearCallHistory();
+
+      await displaySurveyViaCall(xapi);
+      await openDisplayedSurvey(xapi);
+
+      const webviewUrlbase = await getWebViewBaseUrl(xapi);
+      await updateWebViewUrl(xapi, webviewUrlbase);
+      await flushPromises();
+
+      expect(xapi.Command.HttpClient.Post).toHaveBeenCalled();
+      const [options] = xapi.Command.HttpClient.Post.mock.calls.at(-1);
+
+      expect(
+        options.Header.some((header) => header.startsWith("Authorization")),
+      ).toBe(false);
+    });
+
+    it("omits the Authorization header when the custom backend apiKey is an empty string", async () => {
+      const { default: xapi } = await import("xapi");
+      xapi.reset();
+      globalThis.__BYOD_FEEDBACK_TEST_CONFIG__.feedback.apiKey = "";
+      await loadMacro(xapi, productPlatform);
+      xapi.clearCallHistory();
+
+      await displaySurveyViaCall(xapi);
+      await openDisplayedSurvey(xapi);
+
+      const webviewUrlbase = await getWebViewBaseUrl(xapi);
+      await updateWebViewUrl(xapi, webviewUrlbase);
+      await flushPromises();
+
+      expect(xapi.Command.HttpClient.Post).toHaveBeenCalled();
+      const [options] = xapi.Command.HttpClient.Post.mock.calls.at(-1);
+
+      expect(
+        options.Header.some((header) => header.startsWith("Authorization")),
+      ).toBe(false);
+    });
+
+    it("redacts the custom backend apiKey from debug logs", async () => {
+      const { default: xapi } = await import("xapi");
+      xapi.reset();
+      await loadMacro(xapi, productPlatform);
+      xapi.clearCallHistory();
+
+      await displaySurveyViaCall(xapi);
+      await openDisplayedSurvey(xapi);
+
+      const webviewUrlbase = await getWebViewBaseUrl(xapi);
+      await updateWebViewUrl(xapi, webviewUrlbase);
+      await flushPromises();
+
+      // The real header is still sent on the wire...
+      const [options] = xapi.Command.HttpClient.Post.mock.calls.at(-1);
+      expect(options.Header).toContain(
+        "Authorization: Bearer your-api-key",
+      );
+
+      // ...but never appears in what was logged.
+      expect(consoleOutputIncludes("debug", "your-api-key")).toBe(false);
+      expect(consoleOutputIncludes("debug", "[REDACTED]")).toBe(true);
+    });
+
+    it("redacts the Webex bot access token from debug logs", async () => {
+      const { default: xapi } = await import("xapi");
+      xapi.reset();
+      globalThis.__BYOD_FEEDBACK_TEST_CONFIG__.feedback.destination = "webex";
+      await loadMacro(xapi, productPlatform);
+      xapi.clearCallHistory();
+
+      await displaySurveyViaCall(xapi);
+      await openDisplayedSurvey(xapi);
+
+      const webviewUrlbase = await getWebViewBaseUrl(xapi);
+      await updateWebViewUrl(xapi, webviewUrlbase);
+      await flushPromises();
+
+      // The real token is still sent on the wire...
+      const [options] = xapi.Command.HttpClient.Post.mock.calls.at(-1);
+      expect(options.Header).toContain(
+        "Authorization: Bearer your-bot-access-token",
+      );
+
+      // ...but never appears in what was logged.
+      expect(consoleOutputIncludes("debug", "your-bot-access-token")).toBe(
+        false,
+      );
+      expect(consoleOutputIncludes("debug", "[REDACTED]")).toBe(true);
     });
 
     it("posts feedback to a Webex room when destination is webex and target is room", async () => {

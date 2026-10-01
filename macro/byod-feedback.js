@@ -366,10 +366,12 @@ async function sendFeedbackToCustomBackend({ device, lastSession, feedback }) {
   const Timeout = 10;
   const Url = workingConfig.feedback.url;
   const body = JSON.stringify({ device, lastSession, feedback });
-  const Header = [
-    "Content-Type: application/json",
-    "Authorization: Bearer " + workingConfig.feedback.apiKey,
-  ];
+  const Header = ["Content-Type: application/json"];
+
+  if (workingConfig?.feedback?.apiKey) {
+    Header.push("Authorization: Bearer " + workingConfig.feedback.apiKey);
+  }
+
   const ResultBody = "PlainText";
 
   debug("Sending feedback to:", Url);
@@ -379,7 +381,10 @@ async function sendFeedbackToCustomBackend({ device, lastSession, feedback }) {
   debug("Timeout:", Timeout);
 
   try {
-    await xapi.Command.HttpClient.Post({ Header, ResultBody, Timeout, Url }, body);
+    await xapi.Command.HttpClient.Post(
+      { Header, ResultBody, Timeout, Url },
+      body,
+    );
     debug("Feedback sent successfully");
     alert("Feedback sent successfully", 10);
   } catch (error) {
@@ -412,7 +417,10 @@ async function sendFeedbackToWebex({ device, lastSession, feedback }) {
   debug("Timeout:", Timeout);
 
   try {
-    await xapi.Command.HttpClient.Post({ Header, ResultBody, Timeout, Url }, body);
+    await xapi.Command.HttpClient.Post(
+      { Header, ResultBody, Timeout, Url },
+      body,
+    );
     debug("Feedback sent successfully");
     alert("Feedback sent successfully", 10);
   } catch (error) {
@@ -427,7 +435,8 @@ async function sendFeedbackToWebex({ device, lastSession, feedback }) {
 function buildFeedbackMarkdown({ device, lastSession, feedback }) {
   const isSatisfied = feedback?.feedback === "satisfied";
   const emoji = isSatisfied ? "👍" : "👎";
-  const label = feedback?.label || (isSatisfied ? "Satisfied" : "Not satisfied");
+  const label =
+    feedback?.label || (isSatisfied ? "Satisfied" : "Not satisfied");
   const confidence =
     typeof feedback?.confidence === "number"
       ? `${Math.round(feedback.confidence * 100)}%`
@@ -461,7 +470,6 @@ function formatDuration(seconds) {
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
 
-
 function getHashes(url) {
   if (!url) return;
   const hashString = url.split("#")?.slice(1)?.join("#");
@@ -474,25 +482,65 @@ function getHashes(url) {
   }
 }
 
-function alert(Text='', Duration = 10) {
+function alert(Text = "", Duration = 10) {
   debug("Displaying Alert", "\nText:", Text, "\nDuration:", Duration);
   xapi.Command.UserInterface.Message.Alert.Display({
-    Title: 'BYOD Feedback',
+    Title: "BYOD Feedback",
     Text,
     Duration,
   });
 }
+const REDACTED = "[REDACTED]";
+
+// Secrets that must never reach the console, read live off workingConfig so
+// logging always reflects whatever is currently configured.
+function getLoggedSecrets() {
+  return [
+    workingConfig?.feedback?.apiKey,
+    workingConfig?.feedback?.webex?.botAccessToken,
+  ].filter((value) => typeof value === "string" && value.length > 0);
+}
+
+// Recursively replaces any occurrence of a known secret with REDACTED.
+// Only descends into arrays and plain objects (not Error/Date/etc.) so other
+// values keep their normal console formatting.
+function redactValue(value, secrets) {
+  if (typeof value === "string") {
+    return secrets.reduce(
+      (result, secret) => result.split(secret).join(REDACTED),
+      value,
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactValue(item, secrets));
+  }
+  if (value && typeof value === "object" && value.constructor === Object) {
+    const result = {};
+    for (const key of Object.keys(value)) {
+      result[key] = redactValue(value[key], secrets);
+    }
+    return result;
+  }
+  return value;
+}
+
+function redactArgs(args) {
+  const secrets = getLoggedSecrets();
+  if (secrets.length === 0) return args;
+  return args.map((arg) => redactValue(arg, secrets));
+}
+
 function log(...args) {
-  console.log(...args);
+  console.log(...redactArgs(args));
 }
 
 function warn(...args) {
-  console.warn(...args);
+  console.warn(...redactArgs(args));
 }
 
 function debug(...args) {
   if (!workingConfig.debug) return;
-  console.debug(...args);
+  console.debug(...redactArgs(args));
 }
 
 async function init() {
@@ -509,9 +557,12 @@ async function init() {
 
   // Subscribe to People Count
   xapi.Status.RoomAnalytics.PeopleCount.Current.on(processPeopleCount);
- 
+
   // Subscribe to Local Presentations with a debounce of 1 second
-  const debouncedProcessLocalPresentations = debounce(processLocalPresentations, 1000);
+  const debouncedProcessLocalPresentations = debounce(
+    processLocalPresentations,
+    1000,
+  );
   xapi.Status.Conference.Presentation.LocalInstance.on(
     debouncedProcessLocalPresentations,
   );
@@ -525,7 +576,7 @@ async function init() {
   // Get the number of active calls
   const numOfCalls =
     await xapi.Status.SystemUnit.State.NumberOfActiveCalls.get();
-  
+
   // Process the number of active calls
   await processNumOfCalls(numOfCalls);
 
@@ -533,10 +584,9 @@ async function init() {
   const videoOutput = await xapi.Status.Video.Output.get();
   const webcamMode = videoOutput?.Webcam?.Mode;
   // If the webcam mode is defined, subscribe to webcam mode changes and process the webcam mode
-  if(typeof webcamMode != 'undefined') {
+  if (typeof webcamMode != "undefined") {
     xapi.Status.Video.Output.Webcam.Mode.on(processWebcamMode);
-    await processWebcamMode(webcamMode)
-
+    await processWebcamMode(webcamMode);
   }
 
   // Finally, process current local presentations
@@ -547,14 +597,14 @@ async function init() {
 // Check if webview is still open before initializing
 // Close the Check if the webview is still open
 webviewOpen()
-.then(async (isOpen) => {
-  debug("Webview is still open:", isOpen);
-  if (!isOpen) return init();
-  await closeWebView();
-  setTimeout(init, 1000);
-})
-.catch(async (error) => {
-  warn("Error initializing macro:", error);
-  alert("Error initializing macro:", error);
-  init();
-});
+  .then(async (isOpen) => {
+    debug("Webview is still open:", isOpen);
+    if (!isOpen) return init();
+    await closeWebView();
+    setTimeout(init, 1000);
+  })
+  .catch(async (error) => {
+    warn("Error initializing macro:", error);
+    alert("Error initializing macro:", error);
+    init();
+  });
