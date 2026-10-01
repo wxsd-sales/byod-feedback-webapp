@@ -705,6 +705,18 @@ h2 {
   max-height: 280px;
 }
 
+/* A header line the macro won't actually send (e.g. Authorization when no
+   apiKey is configured), shown struck through with an explanatory comment. */
+.code-omitted {
+  color: var(--wizard-text-secondary);
+  text-decoration: line-through;
+}
+
+.code-comment {
+  color: var(--wizard-text-secondary);
+  font-style: italic;
+}
+
 /* Password-style field with a show/hide toggle button. */
 .token-field {
   display: flex;

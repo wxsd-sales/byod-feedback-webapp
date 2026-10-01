@@ -596,10 +596,17 @@ function debounce(fn, delay) {
   };
 
   const updateCustomPayloadPreview = () => {
-    customPayloadPreview.textContent = buildCustomPayloadPreview({
+    const lines = buildCustomPayloadPreview({
       url: feedbackUrlInput.value.trim(),
       apiKey: feedbackApiKeyInput.value.trim(),
     });
+    customPayloadPreview.innerHTML = lines
+      .map((line) =>
+        line.omitted
+          ? `<del class="code-omitted">${escapeHtml(line.text)}</del> <span class="code-comment">// ${escapeHtml(line.note)}</span>`
+          : escapeHtml(line.text),
+      )
+      .join("\n");
   };
 
   const applyValues = (values) => {

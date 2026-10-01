@@ -210,8 +210,14 @@ export function buildFeedbackMarkdown({
 }
 
 /**
- * Builds a representative "POST <url> ... <body>" preview of what the macro
- * sends to a custom backend, for display in the wizard.
+ * Builds the lines of a representative "POST <url> ... <body>" preview of
+ * what the macro sends to a custom backend, for display in the wizard.
+ *
+ * Each line is `{ text }`, except the Authorization header when no apiKey is
+ * configured: that line comes back as `{ text, omitted: true, note }` so the
+ * wizard can render it struck through with an explanatory comment, matching
+ * the macro's own behaviour of only sending that header when apiKey is set
+ * (see sendFeedbackToCustomBackend in macro/byod-feedback.js).
  */
 export function buildCustomPayloadPreview({
   url = "",
@@ -222,10 +228,16 @@ export function buildCustomPayloadPreview({
 } = {}) {
   const body = JSON.stringify({ device, lastSession, feedback }, null, 2);
   return [
-    `POST ${url || "(feedback backend URL)"}`,
-    "Content-Type: application/json",
-    `Authorization: Bearer ${apiKey || "(none)"}`,
-    "",
-    body,
-  ].join("\n");
+    { text: `POST ${url || "(feedback backend URL)"}` },
+    { text: "Content-Type: application/json" },
+    apiKey
+      ? { text: `Authorization: Bearer ${apiKey}` }
+      : {
+          text: "Authorization: Bearer (none)",
+          omitted: true,
+          note: "Not sent if no api key is configured",
+        },
+    { text: "" },
+    { text: body },
+  ];
 }
